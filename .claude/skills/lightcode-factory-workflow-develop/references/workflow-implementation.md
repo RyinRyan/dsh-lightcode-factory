@@ -169,3 +169,7 @@ Workflow 只发起节点工作。排队、开始、节点状态、评审、完�
 8. 所有受影响成员版本。
 
 完成后按目录名和包名反向 `rg`，确认每个接线点都存在。最终 tarball 中必须是实际文件，不能残留 workspace link 或本机绝对依赖。
+
+## 9. 文档同步
+
+Workflow 设计是持续契约。参数、节点、output、observation、失败/取消、安全、依赖或接线变化时，先更新 `.design/workflows/<workflow-id>.md`。若变更影响公开能力、包成员、安装方式、组件边界或已知限制，同时更新根 `README.md` 与 `docs/architecture.md`；开发规则变化还要更新本 Skill 的对应 reference。

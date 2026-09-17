@@ -4,10 +4,10 @@ Skill 不固定工作区版本、DSH/SDK/Cordis/Node 版本、限制值、页面
 
 ## 1. 先确认仓库与变更边界
 
-1. 找到 `lightcode-factory` 根目录和适用的 `AGENTS.md`/项目说明。
+1. 找到 `lightcode-factory` 根目录，完整读取适用的 `AGENTS.md`、`docs/architecture.md` 和项目说明。
 2. 检查工作区状态，保护用户已有修改；不要覆盖或回滚无关内容。
 3. 使用 `rg --files` 和 `rg` 定位文件，不根据旧记忆猜路径。
-4. 记录本次允许修改的范围：普通 Workflow 默认只包含新业务包、设计文档、测试和 Bundle 接线。
+4. 用组件选择表记录本次范围：普通 Workflow 默认只包含业务包、设计文档、测试、相关文档和 Bundle 接线；Backend/Platform 变更必须记录跨层影响。
 
 ## 2. 必查事实
 
@@ -28,6 +28,10 @@ Skill 不固定工作区版本、DSH/SDK/Cordis/Node 版本、限制值、页面
 | 构建和打包成员 | 实际 build/pack 脚本 |
 | Bundle 装配 | Factory manifest、bundleDependencies、patch 和 lockfile |
 | 当前版本策略 | 所有成员 manifest、lockfile 和最近发布产物 |
+| 当前组件边界与已知限制 | `docs/architecture.md`，并用源码/测试复核 |
+| 仓库开发与文档门禁 | 根 `AGENTS.md`、Skill 与审计脚本 |
+| Backend 类型/schema 一致性 | `types`、`runtime-types`、storage spec、remote、Host 与 Browser client |
+| Platform 注册与交互 | Browser 入口、panel/overview/trace、locale、CSS 与组件测试 |
 
 若文档与公开类型或可运行测试不一致，以当前源码和测试为事实，并在本次任务中修正文档。
 
@@ -40,8 +44,11 @@ Skill 不固定工作区版本、DSH/SDK/Cordis/Node 版本、限制值、页面
 当前参数能力：...
 当前节点执行模型：...
 当前 output/observation 页面语义：...
+当前状态所有者与 schema：...
+当前 Platform 数据源和命令：...
 当前 Bundle 接线点：...
 当前测试/构建/打包命令：...
+需要同步的文档：...
 发现的底座限制：...
 ```
 
@@ -58,5 +65,7 @@ Skill 不固定工作区版本、DSH/SDK/Cordis/Node 版本、限制值、页面
 - renderer 支持的字段名；
 - CSS 宽度、响应式断点和测试 viewport；
 - 成员包列表、tarball 名称和安装命令。
+
+若 `docs/architecture.md` 与源码不同，必须把修正文档纳入当前任务，不能只在回复中说明。
 
 文档可以记录“如何查”，不应把一次验证结果写成永久前提。

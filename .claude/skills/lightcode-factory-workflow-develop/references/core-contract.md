@@ -1,4 +1,4 @@
-# 核心契约：底座与 Workflow 的边界
+# 核心契约：Workflow、Backend 与 Platform 的边界
 
 本文件只描述应长期稳定的规则，不记录具体版本号、依赖版本、限制值、CSS 数值或当前实现文件的偶然细节。
 
@@ -10,9 +10,11 @@ LightCode Factory 是统一运行底座：
 - Platform 负责工作流选择、统一看板、运行详情、节点输出、运行信息、事件时间线和轨迹；
 - 业务 Workflow 是独立 Host 插件，只负责参数、顺序节点、业务执行、节点输出和节点内部观测。
 
+Backend 是 durable run 状态和生命周期的唯一写入者；Platform 是统一 Browser 投影；Workflow 是业务执行扩展。Factory Bundle 只负责安装装配，不是业务组件。
+
 Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注销；不复制底座、不改变其他 Workflow，也不要求专属页面才能运行。
 
-## 2. 普通 Workflow 与平台扩展
+## 2. 组件选择与平台扩展
 
 满足以下条件时属于普通 Workflow：
 
@@ -32,7 +34,7 @@ Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注�
 - 统一页面无法表达的专属交互；
 - Workflow 需要直接拥有任务状态或绕过 Backend。
 
-平台扩展不是禁止事项，但必须在设计中明确影响面，并得到用户对扩大范围的授权。未授权时停止，不得在 Workflow 包里伪造底座能力。
+平台扩展不是禁止事项，但必须按职责选择组件：执行/状态/持久化/Remote 进入 Backend，共享 Browser 表达进入 Platform，业务节点留在 Workflow。设计中必须明确影响面和兼容策略；未授权时停止，不得在 Workflow 包里伪造底座能力。
 
 ## 3. 强制不变量
 
@@ -49,6 +51,20 @@ Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注�
 - Backend 是 run 状态、生命周期事件和持久化的唯一写入者。
 - Workflow 不修改 run 状态，不发送 run 生命周期事件，不建立第二套持久状态机。
 - 节点失败通过抛错表达，取消通过共享信号表达，完成和评审由 Backend 判定。
+
+### Backend 契约
+
+- 共享 JSON 类型、持久化 runtime schema、Remote wire schema、Host 实现和 Browser facade 必须协同演进。
+- 同一 run 的 durable mutation 必须串行；取消、卸载、停止和晚到结果不得产生第二个终态。
+- 新增 durable 字段必须说明历史数据兼容或迁移，不能只修改 TypeScript 类型。
+- Backend 只提供跨 Workflow 的通用能力，不得按 Workflow id 或业务节点分支。
+
+### Platform 契约
+
+- Platform 只消费公开 snapshot 和 command facade，不访问 Backend 私有对象、存储或 Workflow 实现。
+- Platform 不写 run/node 状态，不复制状态机，不把本地 UI 状态冒充 durable 状态。
+- 新 renderer 必须基于跨 Workflow 的公开字段语义，并保留未知 JSON 的安全回退。
+- 交互需要可访问的键盘/语义替代，并覆盖 loading、error、review 与终态。
 
 ### 节点执行
 
@@ -74,17 +90,19 @@ Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注�
 
 ### 设计和交付
 
-- 代码前必须存在 `.design/workflows/<workflow-id>.md`。
+- Workflow 代码前必须存在 `.design/workflows/<workflow-id>.md`；Backend/Platform/跨组件代码前必须存在 `.design/changes/<change-id>.md`。
 - 实现变化必须同步设计。
-- 测试、接线、构建、打包、隔离安装和真实交互未全部通过时，不得声明完成。
+- 相关的 `docs/architecture.md`、`README.md` 和 Skill reference 必须随代码刷新。
+- 测试、文档审计、接线、构建和适用的打包/隔离安装/真实交互未全部通过时，不得声明完成。
 
-## 4. 六个 Gate 的通过条件
+## 4. 七个 Gate 的通过条件
 
 | Gate | 通过条件 | 不通过时 |
 | --- | --- | --- |
-| 任务边界 | 普通 Workflow 可由公开契约完整表达 | 记录平台缺口，未授权则暂停 |
-| 设计 | 设计文档完整，节点和页面映射自洽，审计通过 | 补充设计，不写代码 |
-| 实现 | 独立 Host 插件，无底座侵入和私有状态机 | 回退到公开契约实现 |
-| 接线 | 所有 workspace/Bundle 接入点与设计同步 | 补齐后再测试 |
-| 验证 | 自动化和真实 DSH 核心交互均有证据 | 明确失败项，不宣称完成 |
-| 交付 | 设计、版本、产物、验证和限制可追溯 | 补齐交付信息 |
+| 当前事实 | 源码、测试、manifest 与适用文档已读 | 停止猜测，完成探索 |
+| 组件选择 | Workflow/Backend/Platform/跨组件职责明确 | 重新分类，不在错误层绕过 |
+| 设计 | 对应设计完整，契约、兼容、文档和验收自洽 | 补充设计，不写代码 |
+| 实现 | 依赖单向、状态唯一、无业务特例和私有越界 | 回退到公开契约实现 |
+| 文档与接线 | 架构/使用/Skill 文档及 workspace/Bundle 接入同步 | 补齐后再测试 |
+| 验证 | 分层自动化和适用的真实 DSH 核心交互均有证据 | 明确失败项，不宣称完成 |
+| 交付 | 设计、版本、产物、文档、验证和限制可追溯 | 补齐交付信息 |

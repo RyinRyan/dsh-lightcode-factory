@@ -32,6 +32,7 @@ Agent 必须把原始描述转成以下内容：
 8. 插件需要的宿主服务、配置和 artifact；
 9. 接入 workspace/Bundle 的完整影响；
 10. 可重复执行的测试和真实验收场景。
+11. 需要刷新的 architecture、README、Skill reference，以及无需更新的候选文档和理由。
 
 节点应按用户可理解的阶段划分。不要把一个模型调用拆成“准备 prompt、发送 HTTP、解析 JSON”三个业务节点，也不要把多个具有独立结果和失败语义的阶段塞进一个巨大节点。
 
@@ -89,5 +90,6 @@ node .claude/skills/lightcode-factory-workflow-develop/scripts/audit-lightcode-w
 - observation kind、callId/sessionId 关联；
 - 失败、取消、超时或 artifact 策略；
 - 新增宿主依赖、配置或 Bundle 接线。
+- 用户能力、组件边界、页面语义、已知限制或验证范围。
 
-最终交付时，设计状态应为“已实现并验证”，并记录实际验证结果，而不是保留预测性描述。
+最终交付时，设计状态应为“已实现并验证”，并记录实际验证结果和文档同步结果，而不是保留预测性描述。

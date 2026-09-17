@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { access, readFile, readdir } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { basename, isAbsolute, join, relative, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
 const built = args.includes('--built')
+const docs = args.includes('--docs')
 const designFlagIndex = args.indexOf('--design')
 const designArg = designFlagIndex === -1 ? undefined : args[designFlagIndex + 1]
-const positionalArgs = args.filter((arg, index) => arg !== '--built' && arg !== '--design' && index !== designFlagIndex + 1)
+const positionalArgs = args.filter((arg, index) => arg !== '--built' && arg !== '--docs' && arg !== '--design' && index !== designFlagIndex + 1)
 const rootArg = positionalArgs[0] ?? process.cwd()
 const root = resolve(rootArg)
 const errors = []
@@ -32,31 +34,26 @@ async function auditDesign(pathArg) {
 
   const source = await readFile(path, 'utf8')
   const relativePath = relative(root, path).replaceAll('\\', '/')
-  if (!relativePath.startsWith('.design/workflows/')) {
-    errors.push(`${path}: Workflow 设计必须位于 .design/workflows/`)
-  }
+  const workflowDesign = relativePath.startsWith('.design/workflows/')
+  const changeDesign = relativePath.startsWith('.design/changes/')
+  if (!workflowDesign && !changeDesign) errors.push(`${path}: 设计必须位于 .design/workflows/ 或 .design/changes/`)
 
-  const idMatch = source.match(/^- Workflow ID:\s*`([a-z0-9]+(?:-[a-z0-9]+)*)`\s*$/m)
+  const idLabel = workflowDesign ? 'Workflow ID' : 'Change ID'
+  const idMatch = source.match(new RegExp(`^- ${idLabel}:\\s*\x60([a-z0-9]+(?:-[a-z0-9]+)*)\x60\\s*$`, 'm'))
   if (idMatch === null) {
-    errors.push(`${path}: 缺少合法的 Workflow ID 元数据`)
+    errors.push(`${path}: 缺少合法的 ${idLabel} 元数据`)
   } else if (basename(path, '.md') !== idMatch[1]) {
-    errors.push(`${path}: 文件名必须与 Workflow ID ${idMatch[1]} 一致`)
+    errors.push(`${path}: 文件名必须与 ${idLabel} ${idMatch[1]} 一致`)
   }
 
-  const requiredHeadings = [
-    '需求与目标',
-    '底座适配结论',
-    '输入参数',
-    '节点与执行顺序',
-    '输出与页面映射',
-    '观测设计',
-    '状态、失败与取消',
-    '安全与数据边界',
-    '依赖与配置',
-    'Workspace 与 Bundle 接线',
-    '测试与验收',
-    '限制与非目标',
-    '设计自检',
+  const requiredHeadings = workflowDesign ? [
+    '需求与目标', '底座适配结论', '输入参数', '节点与执行顺序', '输出与页面映射',
+    '观测设计', '状态、失败与取消', '安全与数据边界', '依赖与配置',
+    'Workspace 与 Bundle 接线', '测试与验收', '文档同步', '限制与非目标', '设计自检',
+  ] : [
+    '需求与成功标准', '组件选择与职责边界', '当前实现证据', '目标契约与数据流',
+    '状态、并发与生命周期', '持久化、Remote 与兼容性', 'Platform 与交互',
+    '安全与数据边界', '实现与接线计划', '测试与验收', '文档同步', '风险、限制与回滚', '设计自检',
   ]
   for (const heading of requiredHeadings) {
     if (!new RegExp(`^##\\s+\\d+\\.\\s+${escapeRegExp(heading)}\\s*$`, 'm').test(source)) {
@@ -64,20 +61,83 @@ async function auditDesign(pathArg) {
     }
   }
 
-  if (/\{\{WORKFLOW_(?:ID|NAME)\}\}|\[填写(?:[^\]]*)?\]/.test(source)) {
+  if (/\{\{(?:WORKFLOW|CHANGE)_(?:ID|NAME|TYPE)\}\}|\[填写(?:[^\]]*)?\]/.test(source)) {
     errors.push(`${path}: 仍包含未填写的模板占位符`)
   }
   if (/^- \[ \]/m.test(source)) errors.push(`${path}: 设计自检仍有未勾选项目`)
   if (!/^- 设计状态:\s*(?:已自检|已实现并验证)\s*$/m.test(source)) {
     errors.push(`${path}: 设计状态必须为“已自检”或“已实现并验证”`)
   }
-  if (!/^- 底座适配类型:\s*(?:普通 Workflow|平台能力扩展)\s*$/m.test(source)) {
+  if (workflowDesign && !/^- 底座适配类型:\s*(?:普通 Workflow|平台能力扩展)\s*$/m.test(source)) {
     errors.push(`${path}: 底座适配类型必须明确为“普通 Workflow”或“平台能力扩展”`)
   }
+  if (changeDesign && !/^- 变更类型:\s*`?(?:backend|platform|cross-cutting)`?\s*$/m.test(source)) {
+    errors.push(`${path}: 变更类型必须为 backend、platform 或 cross-cutting`)
+  }
+}
+
+async function auditRepositoryDocs() {
+  const required = [
+    'AGENTS.md', 'docs/architecture.md',
+    '.claude/skills/lightcode-factory-workflow-develop/SKILL.md',
+    '.claude/skills/lightcode-factory-workflow-develop/references/component-selection.md',
+    '.claude/skills/lightcode-factory-workflow-develop/references/backend-development.md',
+    '.claude/skills/lightcode-factory-workflow-develop/references/platform-development.md',
+    '.claude/skills/lightcode-factory-workflow-develop/references/documentation-sync.md',
+  ]
+  for (const file of required) if (!await exists(join(root, file))) errors.push(`缺少 Agent 开发文档：${file}`)
+
+  for (const file of ['README.md', 'AGENTS.md', 'docs/architecture.md', '.claude/skills/lightcode-factory-workflow-develop/SKILL.md']) {
+    const path = join(root, file)
+    if (!await exists(path)) continue
+    const source = await readFile(path, 'utf8')
+    for (const match of source.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+      const target = match[1]
+      if (/^(?:https?:|#)/.test(target)) continue
+      if (!await exists(resolve(dirname(path), target))) errors.push(`${file} 链接目标不存在：${target}`)
+    }
+  }
+}
+
+function gitLines(args) {
+  const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' })
+  if (result.status !== 0) return undefined
+  return result.stdout.split(/\r?\n/).map(value => value.trim().replaceAll('\\', '/')).filter(Boolean)
+}
+
+async function auditDocumentationChanges() {
+  const tracked = gitLines(['diff', '--name-only', 'HEAD'])
+  const untracked = gitLines(['ls-files', '--others', '--exclude-standard'])
+  if (tracked === undefined || untracked === undefined) {
+    warnings.push('无法读取 Git 变更，跳过文档同步映射检查')
+    return
+  }
+  const changed = new Set([...tracked, ...untracked])
+  const has = (predicate) => [...changed].some(predicate)
+  const exact = (path) => changed.has(path)
+  const designChanged = (kind) => has(path => path.startsWith(`.design/${kind}/`) && path.endsWith('.md'))
+
+  if (has(path => path.startsWith('packages/backend/src/') || path === 'packages/backend/package.json')
+    && !(exact('docs/architecture.md') && designChanged('changes'))) {
+    errors.push('Backend 源码有变化，但缺少 docs/architecture.md 和 .design/changes/ 的同步变更')
+  }
+  if (has(path => path.startsWith('packages/platform/src/') || path === 'packages/platform/package.json')
+    && !(exact('docs/architecture.md') && designChanged('changes'))) {
+    errors.push('Platform 源码有变化，但缺少 docs/architecture.md 和 .design/changes/ 的同步变更')
+  }
+  const workflowSourceChanged = has(path => /^packages\/(?!backend\/|platform\/|factory\/)[^/]+\/(?:src\/|package\.json$|tsconfig[^/]*\.json$)/.test(path))
+  if (workflowSourceChanged && !designChanged('workflows')) {
+    errors.push('Workflow 源码有变化，但缺少 .design/workflows/ 的同步变更')
+  }
+  const bundleChanged = has(path => path.startsWith('packages/factory/')
+    || ['package.json', 'package-lock.json', 'scripts/build.mjs', 'scripts/pack.mjs'].includes(path))
+  if (bundleChanged && !exact('README.md')) errors.push('Bundle/构建装配有变化，但 README.md 未同步')
 }
 
 const rootManifest = await manifest(join(root, 'package.json'))
 if (rootManifest === undefined) process.exitCode = 1
+await auditRepositoryDocs()
+if (docs) await auditDocumentationChanges()
 
 const packageDirs = []
 if (await exists(join(root, 'packages'))) {
@@ -239,5 +299,5 @@ if (designArg !== undefined) await auditDesign(designArg)
 
 for (const warning of warnings) console.warn(`警告 ${warning}`)
 for (const error of errors) console.error(`错误 ${error}`)
-console.log(`已审计 ${packageDirs.length} 个 LightCode Factory 包：${errors.length} 个错误，${warnings.length} 个警告。`)
+console.log(`已审计 ${packageDirs.length} 个 LightCode Factory 包及 Agent 文档：${errors.length} 个错误，${warnings.length} 个警告。`)
 if (errors.length > 0) process.exitCode = 1

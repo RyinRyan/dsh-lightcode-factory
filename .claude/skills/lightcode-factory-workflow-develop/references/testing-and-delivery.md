@@ -1,8 +1,26 @@
 # 测试、打包与交付
 
-验证目标不是“代码能编译”，而是证明独立 Workflow 可以通过真实 Factory 底座被注册、运行、观测、评审、打包、安装和卸载。
+验证目标不是“代码能编译”，而是证明被修改组件的公开契约、状态所有权、交互、文档和发布装配一致。Workflow 要证明可被注册、运行、观测、评审、安装和卸载；Backend/Platform 要证明所有现有 Workflow 仍可通过通用契约工作。
 
 ## 1. 测试矩阵
+
+### Backend 测试
+
+- 类型、持久化 schema 与 Remote schema 的一致性和 round-trip；
+- 合法/非法状态转换、串行 mutation、持久化失败；
+- admission、queued/running 取消、晚到结果与终态保护；
+- 并发上限、队列补位、Workflow 卸载和 Backend 停止；
+- Host 重启与旧持久化记录兼容；
+- Browser client 的命令、刷新、错误状态和轮询 disposer。
+
+### Platform 测试
+
+- definition 驱动的表单、默认值、提交中状态与错误反馈；
+- 六状态看板、取消/评审动作和详情导航；
+- 节点选择与 output/error 切换，未知 JSON 的通用回退；
+- observation 只进入轨迹，筛选、搜索、关联与检查器正确；
+- 对话框焦点、Escape、ARIA、键盘与非颜色状态表达；
+- 节点不溢出/真实溢出、桌面与较窄窗口行为。
 
 ### 节点级测试
 
@@ -64,6 +82,8 @@ Loader composition 和公开 disposer 是两个不同契约，不要让一个巨
 ```powershell
 node .claude/skills/lightcode-factory-workflow-develop/scripts/audit-lightcode-workflow.mjs . --built --design .design/workflows/<workflow-id>.md
 ```
+
+Backend/Platform 变更改传 `.design/changes/<change-id>.md`。所有任务都运行 `npm.cmd run audit:ai` 检查仓库文档入口与本地代码/文档变更映射。
 
 ## 3. 构建和打包
 
@@ -127,6 +147,7 @@ Windows 环境若 npm cache 因沙箱权限失败，应申请最小必要权限�
 - build/test/pack/audit 全部通过；
 - 最终 tarball 在隔离 Profile 安装并激活；
 - 真实核心交互和页面显示已验证；
+- `AGENTS.md`、`docs/architecture.md`、README、设计与相关 Skill reference 已按影响同步，文档审计通过；
 - 未验证项和底座限制被明确列出。
 
-交付报告应提供设计文档路径、包和版本、节点与 output shape、tarball 路径及可用 hash、验证命令与结果、未验证项和已知限制。
+Backend/Platform-only 变更不强制虚构 Workflow/tarball 验收；是否需要 pack/隔离安装由装配和运行时风险决定，并在设计中说明。交付报告应提供组件选择、设计与刷新文档路径、公共契约变化、包和版本、适用的 tarball 路径及 hash、验证命令与结果、未验证项和已知限制。

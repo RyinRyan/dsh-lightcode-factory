@@ -10,6 +10,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "audit:ai": "node .claude/skills/lightcode-factory-workflow-develop/scripts/audit-lightcode-workflow.mjs . --docs",
     "build": "node scripts/build.mjs",
     "docs:serve": "node scripts/serve-docs.mjs",
     "typecheck": "tsc -b",

@@ -90,3 +90,5 @@ Platform 的信息层级应保持：
 - 节点数量增加时不要求业务代码处理滚动；
 - 错误节点和无输出节点仍有合理页面状态；
 - review、cancelled、failed 等状态使用底座统一动作和视觉语义。
+
+若这些稳定语义、renderer 契约、轨迹分类或页面职责发生变化，必须在同一变更中刷新 `docs/architecture.md`、本文件和 Platform 测试；不能只修改组件实现。

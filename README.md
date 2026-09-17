@@ -2,6 +2,8 @@
 
 独立的 DSH 插件项目。四个成员插件由 `lightcode-factory` 安装入口装配，不修改 DSH 原生源码。
 
+首次参与开发或交给 Agent 修改前，请先读 [仓库开发规范](AGENTS.md) 和 [当前架构](docs/architecture.md)。前者定义组件选择、质量门禁和文档同步要求，后者从当前代码说明 Workflow、Backend、Platform 与 Bundle 的职责、依赖、状态所有权和数据流。
+
 ## 插件开发教学站
 
 本仓库附带一套基于本项目真实开发过程整理的交互式教学站和分册文档，覆盖 Cordis 基础、DSH 插件类型、Web 前台、后台服务、打包、依赖、调测与踩坑：
@@ -72,13 +74,14 @@ export function apply(ctx: Context) {
 
 发布时声明后端兼容版本，构建自己的 host 入口，并提供 DSH bundle patch 装配该插件。使用 `ctx.effect` 注销注册、逐个 `await run.node`、传递取消信号；节点输出必须可 JSON 序列化。细节见 `packages/backend/src/runtime-types.ts` 和 Demo。前后端共享严格 wire schema 位于 `packages/backend/src/remote.ts`，不需要更改 DSH 内建 remotes。
 
-新增或修改 Factory workflow 时使用独立 Skill：[lightcode-factory-workflow-develop](.claude/skills/lightcode-factory-workflow-develop/SKILL.md)。完整契约（节点实现、观测事件、状态流转、页面布局、workspace/Bundle 接入与验收）见其 [workflow-development.md](.claude/skills/lightcode-factory-workflow-develop/references/workflow-development.md)。
+新增或修改 Workflow、Backend、Platform 时统一使用 Skill：[lightcode-factory-workflow-develop](.claude/skills/lightcode-factory-workflow-develop/SKILL.md)。该路径为兼容历史名称保留；Skill 会先进行组件选择，再路由到 Workflow、Backend 或 Platform 的开发规范，并强制在完成前同步相关文档。规范索引见 [workflow-development.md](.claude/skills/lightcode-factory-workflow-develop/references/workflow-development.md)。
 
 ## 开发与验证
 
 ```powershell
 cd D:\develop\dsh-workflow\lightcode-factory
 npm ci
+npm run audit:ai
 npm run build
 npm test
 npm run pack

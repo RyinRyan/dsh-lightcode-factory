@@ -1,14 +1,16 @@
-# Workflow 开发规范索引
+# LightCode Factory 开发规范索引
 
-本文件保留为旧链接兼容入口。规范已按开发阶段拆分，避免单篇长文混合稳定契约与易变化实现细节。
+本文件保留为旧链接兼容入口。规范覆盖 Workflow、Backend、Platform 三个可开发组件；Factory Bundle 仅负责安装装配。
 
 按以下顺序使用：
 
-1. [核心契约](core-contract.md)：底座与 Workflow 的稳定边界、强制规则和任务分类。
-2. [仓库探索](repository-discovery.md)：从当前 checkout 获取版本、接口、构建和页面能力。
-3. [设计门禁](design-template.md)：生成 `.design/workflows/<workflow-id>.md` 并完成设计自检。
-4. [Workflow 实现规范](workflow-implementation.md)：插件结构、注册、节点、输出、观测、安全和生命周期。
-5. [统一页面契约](platform-display-contract.md)：如何让任意 Workflow 正确复用统一运行页和轨迹页。
-6. [测试与交付](testing-and-delivery.md)：测试矩阵、Bundle 接线、打包、隔离安装和浏览器验收。
+1. [核心契约](core-contract.md)：三个组件的稳定边界、状态所有权和强制规则。
+2. [仓库探索](repository-discovery.md)：从当前 checkout 获取接口、schema、构建和页面事实。
+3. [组件选择](component-selection.md)：判断需求属于 Workflow、Backend、Platform 还是跨组件。
+4. Workflow 路径：[设计门禁](design-template.md) -> [实现规范](workflow-implementation.md)。
+5. Backend 路径：[底座变更设计](change-design.md) -> [Backend 开发规范](backend-development.md)。
+6. Platform 路径：[底座变更设计](change-design.md) -> [Platform 开发规范](platform-development.md) -> [统一页面契约](platform-display-contract.md)。
+7. [文档同步](documentation-sync.md)：代码、设计、架构、README 和 Skill 的刷新矩阵。
+8. [测试与交付](testing-and-delivery.md)：分组件测试、Bundle、隔离安装和浏览器验收。
 
 版本号、依赖版本、限制值、CSS 数值、响应式断点和当前 renderer 字段都必须从正在开发的仓库中读取。本索引不记录固定版本快照。
