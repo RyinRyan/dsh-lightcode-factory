@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "composite": true,
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "lightcode-factory-backend": [
+        "./packages/backend/src/index.ts"
+      ],
+      "lightcode-factory-backend/types": [
+        "./packages/backend/src/types.ts"
+      ],
+      "lightcode-factory-backend/client": [
+        "./packages/backend/src/client/index.ts"
+      ]
+    }
+  }
+}

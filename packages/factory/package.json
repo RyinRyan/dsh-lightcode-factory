@@ -1,0 +1,29 @@
+{
+  "name": "lightcode-factory",
+  "version": "0.1.7",
+  "description": "Install LightCode Factory into a DSH web profile",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "lightcode-factory-backend": "0.1.7",
+    "lightcode-factory-platform": "0.1.7",
+    "lightcode-workflow-demo": "0.1.7",
+    "lightcode-workflow-release-readiness": "0.1.7"
+  },
+  "bundleDependencies": [
+    "lightcode-factory-backend",
+    "lightcode-factory-platform",
+    "lightcode-workflow-demo",
+    "lightcode-workflow-release-readiness"
+  ]
+}

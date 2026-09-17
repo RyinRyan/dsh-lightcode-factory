@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/spec.ts",
+    "src/types.ts",
+    "src/runtime-types.ts",
+    "src/remote.ts"
+  ]
+}

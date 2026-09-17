@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/backend/tsconfig.host.json"
+    },
+    {
+      "path": "packages/demo/tsconfig.json"
+    },
+    {
+      "path": "packages/release-readiness/tsconfig.json"
+    },
+    {
+      "path": "packages/platform/tsconfig.host.json"
+    }
+  ]
+}
