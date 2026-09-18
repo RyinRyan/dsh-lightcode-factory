@@ -1,16 +1,18 @@
 import { build } from 'esbuild';
 import { transform } from 'lightningcss';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(root);
+const members = ['contracts', 'runtime', 'storage-sqlite', 'workflows', 'web'];
+for (const dir of members) await rm(resolve(root, 'packages', dir, 'lib'), { recursive: true, force: true });
 const typecheck = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-b'], { stdio: 'inherit' });
 if (typecheck.status !== 0) process.exit(typecheck.status ?? 1);
 
-for (const dir of ['backend', 'platform', 'demo', 'release-readiness']) {
+for (const dir of members) {
   await build({
     entryPoints: [`packages/${dir}/src/index.ts`], outfile: `packages/${dir}/lib/index.js`,
     bundle: true, platform: 'node', format: 'esm', target: 'node24',
@@ -20,7 +22,7 @@ for (const dir of ['backend', 'platform', 'demo', 'release-readiness']) {
 const shared = ['react', 'react/jsx-runtime', 'react-dom', '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-client-store', '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives', '@deepseek-ai/dsh-client-ui-dockkit'];
-for (const [dir, name] of [['backend', 'lightcode-factory-backend'], ['platform', 'lightcode-factory-platform']]) {
+for (const [dir, name] of [['runtime', 'lightcode-factory-runtime'], ['web', 'lightcode-factory-web']]) {
   await build({
     entryPoints: [`packages/${dir}/src/client/index.ts`], outfile: `packages/${dir}/lib/client.js`,
     bundle: true, platform: 'browser', format: 'cjs', target: 'es2022',

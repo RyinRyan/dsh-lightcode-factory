@@ -1,117 +1,83 @@
 # LightCode Factory 当前架构
 
-本文描述当前 checkout 已实现的架构，使人类和 AI 可以从稳定边界进入代码，而不把系统当作黑盒。具体版本、限制值和字段仍以源码、manifest 与测试为准；本文件记录职责、数据流、状态所有权和修改入口。
+本文描述 0.3 当前 checkout 的逻辑视图、开发视图、依赖、状态所有权、数据流、持久化和部署边界。字段与限制以 Contracts、源码和测试为准。
 
-## 1. 系统边界
+## 1. 重构背景与目标
 
-LightCode Factory 是一组安装到 DSH 的进程内 Cordis 插件。它没有修改 DSH 源码，也不是远程 Worker 控制面或恶意插件沙箱。
+早期实现把共享类型、状态实现、Repository 和 Remote 集中在 Backend 包，将 Web 称为 Platform，并把每个内置 Workflow 发布成独立 npm 包。0.2 引入 SQLite 后，Browser 仍周期性读取全部历史。0.3 是不保留旧包/API/数据兼容的架构收口：按职责建立 Contracts、Runtime、SQLite Storage、Workflow Catalog 和 Web，并用分页/详情 Remote 替代全量 snapshot。
+
+目标是让人类和 AI 从目录与包名就能判断职责；共享契约与实现解耦；内置 Workflow 在一个 Catalog 中按 id 分目录；历史增长不再放大每次轮询；Factory Bundle 仍只负责装配。
+
+## 2. 逻辑视图
 
 ```text
-Factory Bundle（安装与装配）
-  ├─ Backend Host ── DSH Storage Domain / Typert Remote
-  │      ↑
-  │      └── Workflow Host plugins（业务执行）
-  ├─ Backend Browser Client ── Remote facade / polling
-  │      ↓
-  └─ Platform Browser plugin（看板、详情、轨迹）
+                         ┌────────────────────────────┐
+                         │ Contracts                  │
+                         │ types / schema / ports /   │
+                         │ Remote v2                  │
+                         └──────┬────────┬────────┬───┘
+                                │        │        │
+                     implements │        │ uses   │ uses
+                                ▼        ▼        ▼
+┌───────────────┐       ┌────────────┐  ┌───────────────┐
+│ SQLite Storage│◄──────│ Runtime    │◄─│ Workflow      │
+│ transaction   │ Port  │ state owner│  │ Catalog       │
+│ page / backup │       │ scheduler  │  │ business nodes│
+└───────────────┘       └─────┬──────┘  └───────────────┘
+                              │ Remote v2 + Browser Client
+                              ▼
+                        ┌───────────────┐
+                        │ Web           │
+                        │ board/detail/ │
+                        │ trace/page    │
+                        └───────────────┘
+
+Factory Bundle：组合并安装以上成员，不承载业务逻辑。
 ```
 
-仓库中三个可开发组件是 Workflow、Backend 和 Platform。`packages/factory` 是发布装配层，不是第四个业务组件。
+Runtime 是 run/node 状态和生命周期事件的唯一决策者。Storage 不判断转换是否合法；Workflow 不写状态；Web 不写 durable 数据；Contracts 不执行逻辑。
 
-## 2. 组件职责与依赖方向
+## 3. 开发视图与组件定位
 
-### 2.1 Workflow：业务执行插件
+```text
+packages/
+  contracts/             # 跨组件稳定契约
+  runtime/               # Host 控制面 + Browser Client
+  storage-sqlite/        # 单机 SQLite Adapter
+  workflows/
+    src/catalog/
+      morning-script-demo/
+      release-readiness/ # 内置 Workflow，每个 id 一个目录
+  web/                   # FactoryBoard / RunOverview / RunTrace
+  factory/               # Bundle composition root
+```
 
-当前实例位于 `packages/demo` 和 `packages/release-readiness`。Workflow 通过 `lightcode-factory-backend` 的公开 exports 获取 `WorkflowRegistration`、节点定义和节点上下文，并在 Cordis 生命周期内注册完整执行函数。
-
-Workflow 负责：
-
-- 面向用户的名称、版本、描述与文本参数；
-- 有序节点及其业务职责；
-- 节点内的模型、工具、API、子进程或纯计算；
-- JSON-safe 节点输出；
-- 安全且有界的 observation；
-- 将取消信号传到最底层并释放资源。
-
-Workflow 不负责 run 状态、调度、持久化、生命周期事件、评审或页面。当前 Backend 会校验节点必须按声明顺序逐个 `await`，拒绝并行、跳过节点以及 execute 提前返回。
-
-### 2.2 Backend：控制面与唯一状态写入者
-
-`packages/backend/src/index.ts` 中的 `LightcodeFactoryBackend` 是 Host 服务，负责：
-
-- 注册与卸载 Workflow definition；
-- 校验已声明的文本参数并接纳任务；
-- 进程内并发队列和顺序节点调度；
-- run/node 状态、生命周期事件和 observation；
-- 使用 DSH Storage Domain 持久化 run；
-- 取消、人工评审、停机 drain 和插件卸载；
-- 输出及 observation 的数量/大小限制；
-- 通过 Typert 暴露 Browser 命令。
-
-Backend 内部契约分层如下：
-
-| 文件 | 角色 | 变更注意事项 |
+| 组件 | npm 包 | 架构定位 |
 | --- | --- | --- |
-| `src/types.ts` | Host/Browser 共享的 JSON-safe 领域类型 | 不放函数或 Host-only 对象 |
-| `src/runtime-types.ts` | Workflow 与 Backend 的进程内执行契约 | 只通过 package exports 暴露 |
-| `src/spec.ts` | 持久化 runtime schema 和 storage domain | 兼容历史数据或设计迁移 |
-| `src/remote.ts` | Browser wire schema 与命令描述 | 与共享类型、Host 方法同步 |
-| `src/index.ts` | 注册、接纳、调度、状态 mutation 与持久化 | 保持 mutation 串行和状态唯一所有权 |
-| `src/client/index.ts` | Browser 侧 snapshot/command facade | 只通过 Remote 通信并管理轮询生命周期 |
+| Contracts | `lightcode-factory-contracts` | JSON-safe types、Zod aggregate schema、Workflow/Repository Port、Remote v2 descriptor |
+| Runtime | `lightcode-factory-runtime` | 注册、任务接纳、队列、状态机、节点执行、取消、评审、重启中断处理、Remote Host 和 Browser Client |
+| SQLite Storage | `lightcode-factory-storage-sqlite` | 单连接、关系 schema、事务、revision CAS、seek 分页、索引和一致性备份 |
+| Workflow Catalog | `lightcode-factory-workflows` | 当前两个内置 Workflow 的业务参数、顺序节点、output 与 observation |
+| Web | `lightcode-factory-web` | Catalog 表单、六状态看板、加载更多、详情、轨迹与命令交互 |
+| Bundle | `lightcode-factory` | 固定成员、安装 patch、发布闭包 |
 
-Backend 重启时会把遗留的 `queued`/`running` run 标记为 `failed`，不会自动恢复节点。已接纳 run 会捕获其注册实现；Workflow 卸载时注销新 definition，并取消/等待该实现的活动任务。
+依赖方向：Runtime、Storage、Workflows 都依赖 Contracts；Web 依赖 Contracts 和 Runtime Client；Bundle 依赖全部成员。禁止 Runtime → Storage 实现、Storage → Workflow/Web、Workflow/Web → Repository 和任意跨包 `src/*`。
 
-### 2.3 Platform：统一 Browser 展示与交互
+## 4. Contracts 视图
 
-`packages/platform` 的 Host 入口为空壳，主要能力在 Browser Client：
+`packages/contracts/src/`：
 
-- `src/client/index.ts` 注册 locale、主面板和侧栏入口，并注入 Backend Browser Client；
-- `WorkflowPlatformPanel.tsx` 负责工作流选择、参数表单、六状态看板、run 详情入口、取消和评审命令；
-- `WorkflowRunOverview.tsx` 负责进度、节点选择、输出、运行信息和生命周期事件；
-- `WorkflowTrace.tsx` 将 observation、节点输出与错误组织为可筛选轨迹；
-- `WorkflowPlatformPanel.module.css` 负责组件自有样式和响应式布局。
+- `types.ts`：definition、run、node、event、page 和 command request；
+- `schema.ts`：完整 durable aggregate runtime schema；
+- `workflow.ts`：registration、execution/node context 和 `lightcodeFactoryRuntime` Port；
+- `repository.ts`：stored revision、seek cursor、bounded query 与 Repository；
+- `remote.ts`：Typert Remote v2 descriptor 和 namespace augmentation。
 
-Platform 只读取 `WorkflowPlatformSnapshot` 并调用 `start/cancel/review/refresh`。它不修改 run，不直接访问 storage，也不调用 Workflow。未知 JSON output 必须有通用格式化回退；增强 renderer 只能基于可跨 Workflow 复用的字段语义。
+0.3 aggregate 要求 `workflowVersion` 和 `input` 必填，不接受早期缺字段记录。Contracts 不包含 Service、SQL、React 或 Node 文件系统逻辑。
 
-### 2.4 Factory Bundle：安装装配
+## 5. Runtime 与状态模型
 
-`packages/factory/package.json` 固定成员依赖和 `bundleDependencies`，`cordis.patch.yml` 按顺序装配 Backend、Workflow 与 Platform，`scripts/pack.mjs` 把成员真实 tarball 安装到临时 staging 后再生成外层 Bundle。
-
-Bundle 不包含运行逻辑。新增包时需要同步 TypeScript references、build/pack 成员、Factory dependencies、bundleDependencies、patch、lockfile 和版本。
-
-## 3. 关键数据流
-
-### 3.1 注册与发现
-
-1. Bundle 装配 Backend 与各 Workflow。
-2. Workflow 在 `ctx.effect` 中调用 `registerWorkflow(registration)`。
-3. Backend 保存带 execute 函数的进程内 registration；对 snapshot 只暴露可序列化 metadata。
-4. Backend Browser Client 通过 Remote 拉取 snapshot；Platform 从 definitions 生成工作流选择和参数表单。
-
-### 3.2 创建与执行
-
-1. Platform 调用 Browser Client 的 `start(workflowId, input)`。
-2. Remote 进入 Backend；Backend 拒绝未知字段、补默认值、校验必填文本并先持久化 `queued` run。
-3. 内存队列按 `maxConcurrentRuns` 调度，run 进入 `running`。
-4. Workflow 按声明顺序调用 `run.node()`；Backend 在每个节点前后写入状态和事件。
-5. 节点可通过 `log/report` 写入 observation；返回值经 JSON schema 和大小限制检查后成为 `node.output`。
-6. 全部节点完成后 run 进入 `review`；人工通过后为 `completed`，人工拒绝复用取消路径。
-
-### 3.3 取消、失败与停止
-
-- 取消先持久化 `cancelled`，再 abort 对应 controller，防止晚到结果覆盖终态。
-- 节点抛错时 Backend abort 执行上下文，等待活动节点结束，再把运行节点和 run 标记为 `failed`。
-- Backend 停止时停止接纳、等待 admission、abort 活动执行、等待 mutation 和 task，再关闭 storage domain。
-- 所有同一 run 的 mutation 经 promise 链串行化，避免 observation、状态和命令并发覆盖。
-
-### 3.4 展示与观测
-
-- Backend Browser Client 当前定时轮询完整 snapshot，并在命令完成后立即 refresh。
-- 运行详情只消费 node output/error 与 Backend 生命周期事件。
-- 轨迹消费 node observations，并附带节点输出/错误作为上下文记录；`callId` 用于关联工具活动，`sessionId` 目前在共享协议中保留。
-- 页面永远以公开数据结构为输入，Workflow 不提供自己的 Browser Client。
-
-## 4. 状态模型
+`LightcodeFactoryRuntime` 发布 Cordis service `lightcodeFactoryRuntime`，注入 `lightcodeFactoryRunRepository` 和 Typert。它保存当前 registrations、已接纳 implementation、队列、controller、task 和 per-run mutation chain。
 
 ```text
 queued -> running -> review -> completed
@@ -121,44 +87,76 @@ queued -> running -> review -> completed
              +--------------> failed
 ```
 
-节点状态为 `pending | running | completed | cancelled | failed`。状态转换只能由 Backend 完成。Workflow 的职责只有完成节点、抛出错误或响应取消；Platform 的职责只有发送用户命令并显示结果。
+节点状态是 `pending | running | completed | cancelled | failed`。同一 run mutation 串行；每次先读取 revision、计算新聚合，再 CAS 保存。取消先保存 cancelled 后 abort，晚到 output/observation 不能覆盖终态。queued/running 在 Host 重启后标记 failed，不伪造 checkpoint 恢复。
 
-## 5. 如何选择修改位置
+Workflow registration disposer 注销 definition，并取消/等待已捕获该 implementation 的活动任务。Runtime stop 停止接纳、等待 admission、abort/等待 tasks 和 mutations；随后 Storage 才关闭。
 
-| 需求例子 | 首选组件 | 原因 |
+## 6. Remote v2 与 Browser 数据流
+
+namespace 是 `factory`：
+
+| 方法 | 作用 |
+| --- | --- |
+| `catalog()` | 当前 Workflow definitions |
+| `listRuns({ limit, cursor?, statuses? })` | 最大 100 条的有界页面和 opaque next cursor |
+| `getRun({ runId })` | 单条最新完整 aggregate |
+| `start/cancel/review` | durable 命令，返回最新 aggregate |
+
+Browser service `lightcodeFactoryClient` 首次并行读取 catalog 与第一页；750ms 轮询只刷新默认 60 条第一页。`loadMore()` 追加下一页并按 id 去重；打开卡片调用 `getRun()` 刷新详情；命令后刷新第一页并保留返回 aggregate。不存在全历史 snapshot API。
+
+Web 只从 `FactoryClientSnapshot` 派生页面。运行详情展示 output/error 与 Runtime 生命周期事件；轨迹展示 observation、callId/sessionId；未知 JSON 使用通用回退。禁止按 workflowId、包名、节点 id 或中文名称分支。
+
+## 7. Workflow Catalog
+
+内置 Workflow 位于 `packages/workflows/src/catalog/<workflow-id>/`：
+
+- `release-readiness`：确定性输入规范化、风险评分和发布清单；只需要 Runtime。
+- `morning-script-demo`：问候、当前模型生成脚本、受宿主策略约束的进程执行；需要 Agent/Model/Sandbox/Subprocess。
+
+Catalog 先注册轻量 Workflow；Demo 通过独立 `ctx.inject` 等待重依赖，重能力缺失不阻断 release-readiness。两个 Workflow 共享发布、配置和生命周期边界，因此合并为一个包；未来边界不同的 Workflow 才独立发布。
+
+## 8. SQLite 数据视图
+
+权威数据库默认位于 DSH home 的 `lightcode-factory/factory.sqlite3`。
+
+| 表 | 作用 | 约束/索引 |
 | --- | --- | --- |
-| 新增一个发布评估或代码生成流程 | Workflow | 业务参数、节点与结果只属于该流程 |
-| 新增参数类型、重试、checkpoint、DAG 或新 run 状态 | Backend，并可能联动 Platform | 改变所有 Workflow 的执行/协议语义 |
-| 新增通用 artifact 展示、轨迹过滤或可访问性交互 | Platform | 只改变共享 Browser 呈现 |
-| 新字段既要持久化又要展示 | Backend -> Platform | 先定义类型/schema/Remote，再消费 |
-| 新增 Workflow 包并随 Bundle 安装 | Workflow + Factory 接线 | Bundle 只装配，不实现业务 |
+| `factory_runs` | run 主状态、input、revision | PK id；created/id、status/created/id、workflow/created/id 索引 |
+| `factory_run_nodes` | node 状态、output、error | PK run+node；唯一 run+ordinal；FK cascade |
+| `factory_run_events` | append-only 生命周期事件 | PK run+sequence |
+| `factory_node_observations` | 有界过程事实 | PK run+node+ordinal；复合 FK |
+| `factory_schema_migrations` | schema 版本 | PK version；SQLite user_version 同步 |
 
-跨组件变更必须保持依赖单向：Workflow 不依赖 Platform；Platform 不导入 Backend 私有源码；Backend 不依赖具体 Workflow。
+列表使用 `(created_at DESC, id DESC)` seek pagination，读取 `limit + 1` 判断 continuation；状态过滤参数化。一个 mutation 的主记录、节点、observation 和事件在 `BEGIN IMMEDIATE` 事务中提交。revision 冲突回滚全部写入。
 
-## 6. 当前能力边界
+`createBackup(destinationPath)` 使用 SQLite 在线 backup API，拒绝覆盖和源/目标相同。恢复需要停止活动连接，以备份启动新的 Repository 并核对数据。0.3 不读取 `workflow_platform.json`，也不承诺读取 0.2 SQLite；检测到未标记的旧 Factory schema 时明确拒绝启动。
 
-当前已实现：可信进程内插件、字符串参数、顺序节点、有界 JSON 输出与 observation、进程内并发队列、取消、人工评审、JSON storage、Remote 命令、轮询看板、统一详情和轨迹。
+## 9. 部署视图
 
-当前未实现：非文本参数/安全凭据输入、DAG/并行/循环/动态节点、自动重试、checkpoint/断点续跑、幂等启动键、事件推送、跨进程 Worker、多租户隔离、恶意插件沙箱、独立数据库服务。引入这些能力应先做 Backend/Platform 设计，不得在单个 Workflow 中私建替代品。
-
-## 7. 代码导航与验证
-
-开发入口：
-
-- 仓库规范：`AGENTS.md`
-- Agent Skill：`.claude/skills/lightcode-factory-workflow-develop/SKILL.md`
-- Backend 行为：`packages/backend/src/` 与 `packages/backend/tests/backend.spec.ts`
-- Platform 行为：`packages/platform/src/client/` 与 `packages/platform/tests/panel.spec.tsx`
-- Workflow 范例：`packages/release-readiness/`
-- 构建/打包：`scripts/build.mjs`、`scripts/pack.mjs`
-
-基础验证：
-
-```powershell
-npm.cmd run audit:ai
-npm.cmd run typecheck
-npm.cmd test -- --run
-npm.cmd run build
+```text
+一个 DSH Host
+  └─ 一个 Factory Runtime
+       ├─ 一个本地 SQLite 文件
+       ├─ 一个本地 artifact 目录
+       └─ 进程内可信 Workflow Catalog
 ```
 
-涉及 Bundle 或安装行为时再运行 `npm.cmd run pack`，并在隔离 DSH Home/Profile 中完成真实安装、运行和浏览器验收。
+SQLite 必须位于本机持久卷，不支持网络共享文件系统多主写。多实例/远程 Worker/高可用需要新 PostgreSQL Adapter、durable queue、attempt、lease、heartbeat、幂等和恢复协议，不能让多个 Runtime 共享当前 SQLite。
+
+当前 Node 24.11 的 `node:sqlite` 仍发出实验特性警告；正式生产发布前必须固定经过验证的 Node/SQLite 版本并完成故障注入与规模负载验收。
+
+## 10. 当前能力与限制
+
+已实现：Contracts 分层、可信进程内 Workflow Catalog、文本参数、顺序节点、有界 JSON output/observation、并发队列、取消、人工评审、SQLite 事务/revision/seek 分页/备份、Remote v2、详情查询、统一 Web 看板/详情/轨迹。
+
+未实现：复杂/凭据输入、DAG/并行/循环/动态节点、自动重试、checkpoint、run attempt、幂等启动键、事件推送、跨进程 Worker、多租户隔离、恶意插件沙箱、PostgreSQL、高可用、自动归档和对象存储。
+
+## 11. 修改入口与验证
+
+- 仓库规范：`AGENTS.md`
+- Skill：`.claude/skills/lightcode-factory-develop/SKILL.md`
+- 设计：`.design/changes/production-architecture-completion.md`
+- Contracts/Runtime/Storage/Workflows/Web：对应 `packages/*/src` 与 `tests`
+- 构建/打包：`scripts/build.mjs`、`scripts/pack.mjs`
+
+基础门禁：`npm.cmd run audit:ai`、`npm.cmd run typecheck`、`npm.cmd test -- --run`、`npm.cmd run build`、`npm.cmd run pack`。Bundle 变更还需隔离 DSH 安装/启动、真实 Workflow/Web 交互、重启读取和备份恢复。

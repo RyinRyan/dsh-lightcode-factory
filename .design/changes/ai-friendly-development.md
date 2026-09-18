@@ -29,7 +29,7 @@
 
 不改变持久化 domain、runtime schema、Remote schema 或公共 TypeScript 类型，对历史 run、已安装 Workflow 和 Browser 无运行时兼容影响。Skill 路径和历史索引文件保持不变，旧链接继续可用。
 
-## 7. Platform 与交互
+## 7. Web 与交互
 
 不改变 Platform UI。新增规范说明统一页面只能消费公开 snapshot/commands，output 与 observation 分工、通用 JSON fallback、无 Workflow 特例、可访问性和完整桌面浏览器验收要求。
 

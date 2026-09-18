@@ -2,10 +2,13 @@
   "files": [],
   "references": [
     {
-      "path": "packages/backend/tsconfig.client.json"
+      "path": "packages/contracts/tsconfig.json"
     },
     {
-      "path": "packages/platform/tsconfig.client.json"
+      "path": "packages/runtime/tsconfig.client.json"
+    },
+    {
+      "path": "packages/web/tsconfig.client.json"
     }
   ]
 }

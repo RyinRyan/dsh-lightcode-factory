@@ -1,6 +1,6 @@
 ---
 name: dsh-plugin-develop
-description: 根据原始产品需求设计、实现、打包、安装并验证通用 DSH/Cordis 插件或插件套件，包括 Host Service、Web Client、Remote、Tool、Hook 和 Bundle。为 lightcode-factory 新增或修改业务 workflow 时不要使用；改用 lightcode-factory-workflow-develop。
+description: 根据原始产品需求设计、实现、打包、安装并验证通用 DSH/Cordis 插件或插件套件，包括 Host Service、Web Client、Remote、Tool、Hook 和 Bundle。为 lightcode-factory 新增或修改组件时不要使用；改用 lightcode-factory-develop。
 ---
 
 # DSH 插件开发

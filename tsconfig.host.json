@@ -2,16 +2,19 @@
   "files": [],
   "references": [
     {
-      "path": "packages/backend/tsconfig.host.json"
+      "path": "packages/contracts/tsconfig.json"
     },
     {
-      "path": "packages/demo/tsconfig.json"
+      "path": "packages/runtime/tsconfig.host.json"
     },
     {
-      "path": "packages/release-readiness/tsconfig.json"
+      "path": "packages/storage-sqlite/tsconfig.json"
     },
     {
-      "path": "packages/platform/tsconfig.host.json"
+      "path": "packages/workflows/tsconfig.json"
+    },
+    {
+      "path": "packages/web/tsconfig.host.json"
     }
   ]
 }

@@ -14,7 +14,7 @@ function run(args, cwd) {
   return result.stdout;
 }
 const tarballs = {};
-for (const dir of ['backend', 'platform', 'demo', 'release-readiness']) {
+for (const dir of ['contracts', 'runtime', 'storage-sqlite', 'workflows', 'web']) {
   const manifest = JSON.parse(await readFile(join(root, 'packages', dir, 'package.json'), 'utf8'));
   const output = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', dist], join(root, 'packages', dir)));
   tarballs[manifest.name] = join(dist, output[0].filename);

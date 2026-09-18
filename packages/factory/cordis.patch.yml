@@ -1,11 +1,13 @@
 - insert:
-    - id: lightcode-factory-backend
-      name: lightcode-factory-backend
-    - id: lightcode-workflow-demo
-      name: lightcode-workflow-demo
+    - id: lightcode-factory-storage-sqlite
+      name: lightcode-factory-storage-sqlite
+      config:
+        databasePath: !!js dshHomePath('lightcode-factory/factory.sqlite3')
+    - id: lightcode-factory-runtime
+      name: lightcode-factory-runtime
+    - id: lightcode-factory-workflows
+      name: lightcode-factory-workflows
       config:
         artifactRoot: !!js dshHomePath('lightcode-factory/artifacts')
-    - id: lightcode-workflow-release-readiness
-      name: lightcode-workflow-release-readiness
-    - id: lightcode-factory-platform
-      name: lightcode-factory-platform
+    - id: lightcode-factory-web
+      name: lightcode-factory-web
