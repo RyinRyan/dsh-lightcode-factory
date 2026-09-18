@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS factory_runs (
   status TEXT NOT NULL CHECK (status IN ('queued','running','review','completed','cancelled','failed')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
+  scheduled_for TEXT,
   current_node_id TEXT,
   error TEXT,
   revision INTEGER NOT NULL CHECK (revision > 0)
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS factory_node_observations (
   FOREIGN KEY (run_id, node_id) REFERENCES factory_run_nodes(run_id, node_id) ON DELETE CASCADE
 ) STRICT;
 `
+const CURRENT_SCHEMA_VERSION = 2
 
 /** SQLite infrastructure adapter for the Runtime-owned run repository port. */
 export class SqliteWorkflowRunRepository implements WorkflowRunRepository {
@@ -84,14 +86,19 @@ export class SqliteWorkflowRunRepository implements WorkflowRunRepository {
       database.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL;')
       const existing = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'factory_runs'").get()
       const userVersion = Number((database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
-      if (existing !== undefined && userVersion !== 1) {
-        throw new Error('Unsupported Factory SQLite schema; create a new 0.3 database or restore a 0.3 backup')
+      if ((existing === undefined && userVersion !== 0)
+        || (existing !== undefined && ![1, CURRENT_SCHEMA_VERSION].includes(userVersion))) {
+        throw new Error('Unsupported Factory SQLite schema; create a new 0.4 database or restore a 0.4 backup')
       }
       this.transaction(() => {
-        database.exec(INITIAL_SCHEMA)
+        if (existing === undefined) database.exec(INITIAL_SCHEMA)
+        else if (userVersion === 1) database.exec('ALTER TABLE factory_runs ADD COLUMN scheduled_for TEXT')
+        else database.exec(INITIAL_SCHEMA)
         database.prepare('INSERT OR IGNORE INTO factory_schema_migrations(version, applied_at) VALUES (?, ?)')
           .run(1, new Date().toISOString())
-        database.exec('PRAGMA user_version = 1')
+        database.prepare('INSERT OR IGNORE INTO factory_schema_migrations(version, applied_at) VALUES (?, ?)')
+          .run(CURRENT_SCHEMA_VERSION, new Date().toISOString())
+        database.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`)
       })
     } catch (error) {
       database.close()
@@ -162,9 +169,10 @@ export class SqliteWorkflowRunRepository implements WorkflowRunRepository {
     this.transaction(() => {
       const result = this.db.prepare(`UPDATE factory_runs SET
         workflow_id = ?, workflow_version = ?, input_json = ?, name = ?, status = ?, created_at = ?, updated_at = ?,
-        current_node_id = ?, error = ?, revision = ? WHERE id = ? AND revision = ?`).run(
+        scheduled_for = ?, current_node_id = ?, error = ?, revision = ? WHERE id = ? AND revision = ?`).run(
         run.workflowId, run.workflowVersion, JSON.stringify(run.input),
-        run.name, run.status, run.createdAt, run.updatedAt, run.currentNodeId ?? null, run.error ?? null,
+        run.name, run.status, run.createdAt, run.updatedAt, run.scheduledFor ?? null,
+        run.currentNodeId ?? null, run.error ?? null,
         revision, run.id, expectedRevision,
       )
       if (Number(result.changes) !== 1) throw new Error(`workflow run '${run.id}' revision conflict`)
@@ -207,10 +215,12 @@ export class SqliteWorkflowRunRepository implements WorkflowRunRepository {
 
   private insertRun(run: WorkflowRunView, revision: number): void {
     this.db.prepare(`INSERT INTO factory_runs(
-      id, workflow_id, workflow_version, input_json, name, status, created_at, updated_at, current_node_id, error, revision
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      id, workflow_id, workflow_version, input_json, name, status, created_at, updated_at,
+      scheduled_for, current_node_id, error, revision
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       run.id, run.workflowId, run.workflowVersion, JSON.stringify(run.input),
-      run.name, run.status, run.createdAt, run.updatedAt, run.currentNodeId ?? null, run.error ?? null, revision,
+      run.name, run.status, run.createdAt, run.updatedAt, run.scheduledFor ?? null,
+      run.currentNodeId ?? null, run.error ?? null, revision,
     )
   }
 
@@ -268,6 +278,7 @@ export class SqliteWorkflowRunRepository implements WorkflowRunRepository {
       id: String(row.id), workflowId: String(row.workflow_id), name: String(row.name), status: row.status,
       createdAt: String(row.created_at), updatedAt: String(row.updated_at), nodes, events,
       workflowVersion: String(row.workflow_version), input: JSON.parse(String(row.input_json)),
+      ...(row.scheduled_for === null ? {} : { scheduledFor: String(row.scheduled_for) }),
       ...(row.current_node_id === null ? {} : { currentNodeId: String(row.current_node_id) }),
       ...(row.error === null ? {} : { error: String(row.error) }),
     })

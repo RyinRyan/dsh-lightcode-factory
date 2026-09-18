@@ -2,39 +2,34 @@
 
 开始前必须已有审计通过的 `.design/workflows/<workflow-id>.md`。本文件给出稳定实现模式；准确类型和字段以 Contracts 公开 exports 为准。
 
-## 1. 包结构与依赖
+## 1. 先选择 Catalog 或独立包
 
-普通 Workflow 使用纯 Host 包：
-
-```text
-packages/<workflow>/
-├─ package.json
-├─ tsconfig.json
-├─ src/index.ts
-└─ tests/
-```
-
-依赖方向：
+内置业务默认放在当前 Catalog：
 
 ```text
-业务 Workflow --公开注册契约--> Factory Runtime
-Factory Web --Remote Page/Detail--> Factory Runtime
+packages/workflows/
+├─ src/index.ts                         # Catalog 入口与注册
+├─ src/catalog/<workflow-id>/index.ts   # 每个 id 的业务定义
+└─ tests/<workflow-id>.spec.ts
 ```
 
-要求：
+只有发布节奏、权限、宿主依赖、配置或生命周期边界不同，才建立独立纯 Host 包。独立包需要自己的 manifest、workspace/Bundle 接线和隔离安装验证；Catalog 内新增目录不新增 Bundle 成员或 Browser Client。
 
-- 包名、版本、exports、files 和模块格式跟随当前 workspace；
-- Contracts 使用正式 package dependency，Cordis 按当前仓库约定声明；
-- 不使用绝对 `file:` 依赖，不深层导入其他包源码；
-- 默认没有 `dsh.client` 和 `./client`；
-- 需要其他 Host 服务时显式声明 inject，并在设计中说明用途与缺失行为。
+依赖方向始终为：
 
-## 2. 注册模式
+```text
+Workflow --Contracts WorkflowRegistration--> Runtime
+Web --Runtime Browser Client/Remote--> Runtime
+```
 
-从 `lightcode-factory-contracts/workflow` 导入注册和节点上下文类型。实现应遵循以下形状：
+Workflow 只依赖 Contracts 的公开 exports 与正式声明的 Host service；不得使用绝对 `file:` 依赖、跨包 `src/*`、`dsh.client` 或专属 Web 页面。
+
+## 2. 定义、注册与重依赖
+
+从 `lightcode-factory-contracts/workflow` 导入注册和节点上下文类型。目录文件定义 registration，Catalog 根入口负责注册：
 
 ```ts
-const workflow = {
+export const workflow = {
   id: 'stable-kebab-id',
   version: '从当前版本策略确定',
   name: '面向用户的名称',
@@ -47,26 +42,21 @@ const workflow = {
   },
 } satisfies WorkflowRegistration
 
-export const inject = ['lightcodeFactoryRuntime']
-
-export function apply(ctx: Context): void {
-  ctx.effect(
-    () => ctx.lightcodeFactoryRuntime.registerWorkflow(workflow),
-    'register stable-kebab-id workflow',
-  )
-}
+// packages/workflows/src/index.ts
+ctx.effect(() => ctx.lightcodeFactoryRuntime.registerWorkflow(workflow),
+  'catalog: register stable-kebab-id workflow')
 ```
 
 规则：
 
 - id 发布后保持稳定；
-- version 描述节点和输出语义，按当前仓库策略升级；
+- version 描述参数、节点顺序和 output 语义；平台已有的定时创建能力不单独触发业务 Workflow version 变化；
 - name/description 面向用户；
 - parameters 只使用当前公开契约支持的类型；
 - nodes 的顺序就是执行和页面顺序，id 唯一；
 - execute 必须执行全部声明节点并逐个 await。
 
-注册放在 `ctx.effect`，使卸载可以注销 definition，并由 Runtime 处理已接纳任务。不要直接写服务注册表。
+注册放在 `ctx.effect`，使卸载可以注销 definition，并由 Runtime 处理已接纳任务。轻量 Workflow 应立即注册；模型、Sandbox、子进程等重依赖 Workflow 必须在 Catalog 内使用独立 `ctx.inject([...])` 延迟注册，缺失重依赖不能阻断其他 Workflow。不要直接写服务注册表。
 
 ## 3. 输入和业务校验
 
@@ -144,20 +134,31 @@ async function executeNode(input: Input, node: WorkflowNodeContext): Promise<Out
 
 具体 kind 和限制值必须从当前 Web/Runtime 源码确认。
 
-## 7. 状态和生命周期
+## 7. 状态、定时与生命周期
 
-Workflow 只发起节点工作。排队、开始、节点状态、评审、完成、取消、失败和重启恢复语义由 Runtime 产生。节点作者只负责：
+Workflow 只发起节点工作。排队、立即/定时接纳、到点入队、开始、节点状态、评审、完成、取消、失败和重启恢复语义由 Runtime 产生。节点作者只负责：
 
 - 在节点开始后完成、抛错或响应取消；
 - 不让晚到结果覆盖终态；
 - 不伪造生命周期事件；
 - 不在 Workflow 内建立 durable 状态机。
 
+`scheduledFor` 是 start command 的可选通用字段：Workflow 不把它复制为业务参数，不创建 `setTimeout`，不自行处理到点、取消、卸载或重启恢复。若业务需要 Cron、重复规则、修改计划或错过窗口策略，先转为 Contracts/Runtime/Storage 的平台能力设计。
+
 设计和测试必须以当前 Runtime 实际状态图为准。
 
-## 8. Workspace 与 Bundle 接线
+## 8. Catalog 接线与独立包接线
 
-新增包后从当前仓库确认并同步所有入口，通常包括：
+新增 Catalog Workflow 通常只需要：
+
+1. `src/catalog/<workflow-id>/` 实现与测试；
+2. `packages/workflows/src/index.ts` 的 import、注册和重依赖隔离；
+3. 对应 Workflow 设计、测试和必要的 Catalog 配置；
+4. 仅当用户能力或边界变化时同步 README/architecture。
+
+不要为 Catalog 目录修改 Factory dependencies、bundleDependencies 或 patch；`lightcode-factory-workflows` 已作为一个成员随 Bundle 装配。
+
+只有新增独立包时，从当前仓库确认并同步所有入口，通常包括：
 
 1. 新包 manifest 和 tsconfig；
 2. 根 TypeScript project references；
@@ -170,6 +171,8 @@ Workflow 只发起节点工作。排队、开始、节点状态、评审、完�
 
 完成后按目录名和包名反向 `rg`，确认每个接线点都存在。最终 tarball 中必须是实际文件，不能残留 workspace link 或本机绝对依赖。
 
-## 9. 文档同步
+## 9. 测试与文档同步
+
+至少覆盖 definition（id、参数、节点）、成功到 review、业务失败、取消、Cordis disposer；重依赖 Workflow 还要覆盖缺失依赖不阻断轻量 Workflow、模型/工具/子进程失败和资源释放。通过真实 Loader 装配 Catalog，避免只直接调用 execute 而遗漏注册、配置或 lifecycle。
 
 Workflow 设计是持续契约。参数、节点、output、observation、失败/取消、安全、依赖或接线变化时，先更新 `.design/workflows/<workflow-id>.md`。若变更影响公开能力、包成员、安装方式、组件边界或已知限制，同时更新根 `README.md` 与 `docs/architecture.md`；开发规则变化还要更新本 Skill 的对应 reference。

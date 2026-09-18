@@ -35,5 +35,6 @@ Runtime Browser Client 通过原生 Remote `$mount` 注册 `factory` namespace�
 - 0.2.0 新增独立 Storage 插件和 `WorkflowRunRepository` 端口，默认使用 SQLite；已在隔离 profile 中验证安装、启动、建表和 schema migration，并使用旧 JSON 副本验证全部运行记录导入、备份和幂等行为。浏览器与 Backend 的 Remote v1 协议保持不变。
 - 0.3.0 将共享契约抽入 Contracts，Backend 更名 Runtime，Platform 更名 Web，两个内置 Workflow 合并为 Catalog，SQLite Adapter 名称显式包含介质；Remote v2 改为有界 seek pagination 与独立 detail，并增加 SQLite 在线备份/恢复验证。该版本是明确的破坏性升级。
 - 0.3.0 候选 Bundle 已在全新隔离 profile `factory-03` 安装、启动并完成发布就绪 Workflow 的创建、运行详情、9 条轨迹、评审通过和完成态闭环；390×844 窄屏无根级横向溢出。实际数据库 `user_version = 1`，包含五张 Factory 表和三个 run 查询索引，在线备份后从副本重开读取的 3 条 run 与源库一致。全量测试为 6 个文件、22 项，候选包 SHA-256 为 `7A214CF77054A1D141734F79DE2EC3C3C637DF19770AF6E519A68CB3DBA8F8F4`。
+- 0.4.0 增加一次性 `scheduledFor`：立即任务保持原协议行为，定时任务以 queued 持久化，到点才入执行队列；取消、Workflow 卸载/重注册和 Host 重启均由 Runtime 按 durable 状态收口。SQLite 从 `user_version = 1` 原地迁移到 2，新增 nullable `factory_runs.scheduled_for`；回滚 0.3 必须恢复迁移前备份。晨间脚本的 Agent 非完成错误会提示检查当前 DSH 模型/API Key，但 Factory 不管理凭据。最终验证证据见 `.design/changes/scheduled-workflow-runs.md`。
 
 测试模型是单独、未打包的确定性 adapter，不代表真实外部模型已联调。生产插件不修改权限配置。测试使用隔离 home，并仅针对已知脚本启用测试执行权限。原 `dsh` 目录和用户 settings.yaml 未由本次迁移修改。

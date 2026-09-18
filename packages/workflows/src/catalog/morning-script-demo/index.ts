@@ -148,7 +148,10 @@ async function generateScript(
       await reports
       controller.signal.throwIfAborted()
       if (reportFailure !== undefined) throw reportFailure
-      if (stopReason !== 'completed') throw new Error('Agent did not complete: ' + (stopReason ?? 'no turn'))
+      if (stopReason !== 'completed') {
+        throw new Error('Agent did not complete: ' + (stopReason ?? 'no turn')
+          + '. Check the current DSH model and API key configuration.')
+      }
       const match = /```(?:javascript|js|mjs)?\s*\n([\s\S]*?)```/i.exec(answer)
       if (!match?.[1]?.trim()) throw new Error('Model did not return a fenced JavaScript script')
       return { filename: 'generated-demo.mjs', code: match[1].trim() + '\n', sessionId }

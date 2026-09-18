@@ -60,6 +60,35 @@ it('keeps the board in place and dismisses the task dialog without creating a ru
   expect(start).not.toHaveBeenCalled()
 })
 
+it('creates a one-time scheduled task from local browser time', async () => {
+  const start = vi.fn().mockResolvedValue({})
+  render(<FactoryBoard {...props({ phase: 'ready', error: null, runs: [], definitions: [{
+    id: 'report', version: '1.0.0', name: '报告生成', description: '',
+    parameters: [{ name: 'subject', label: '报告主题', required: true }], nodes: [{ id: 'report', name: '生成报告' }],
+  }] }, start)} />)
+
+  fireEvent.click(screen.getByText('新建任务'))
+  fireEvent.change(screen.getByLabelText('报告主题'), { target: { value: '定时报告' } })
+  fireEvent.click(screen.getByLabelText('定时执行'))
+  const localTime = '2099-01-02T03:04'
+  fireEvent.change(screen.getByLabelText('计划执行时间'), { target: { value: localTime } })
+  fireEvent.click(screen.getByText('创建定时任务'))
+
+  await waitFor(() => {
+    expect(start).toHaveBeenCalledWith('report', { subject: '定时报告' }, new Date(localTime).toISOString())
+  })
+})
+
+it('shows the planned time for a queued scheduled task', () => {
+  render(<FactoryBoard {...props({ phase: 'ready', error: null, definitions: [], runs: [{
+    id: 'scheduled', workflowId: 'report', workflowVersion: '1.0.0', input: {}, name: '报告生成', status: 'queued',
+    createdAt: '2026-09-18T01:00:00.000Z', updatedAt: '2026-09-18T01:00:00.000Z',
+    scheduledFor: '2099-01-02T03:04:00.000Z', events: [], nodes: [],
+  }] })} />)
+
+  expect(screen.getByText(/计划于/)).toBeTruthy()
+})
+
 it('keeps run details as the default sheet and opens trajectory on demand', () => {
   render(<FactoryBoard {...props({ phase: 'ready', error: null, definitions: [], runs: [{
     id: 'one', workflowId: 'report', name: '报告生成', status: 'review', createdAt: '2026-09-16', updatedAt: '2026-09-16',

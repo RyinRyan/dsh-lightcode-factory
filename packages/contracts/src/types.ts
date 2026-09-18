@@ -60,6 +60,8 @@ export interface WorkflowRunView {
   readonly status: WorkflowRunStatus
   readonly createdAt: string
   readonly updatedAt: string
+  /** Optional UTC instant at which a queued run becomes eligible for execution. */
+  readonly scheduledFor?: string
   readonly currentNodeId?: string
   readonly nodes: readonly WorkflowNodeRun[]
   readonly events: readonly WorkflowRunEvent[]
@@ -76,8 +78,12 @@ export interface WorkflowRunListRequest {
   readonly cursor?: string
   readonly statuses?: readonly WorkflowRunStatus[]
 }
-/** Task creation request; only declared text inputs are accepted. */
-export interface WorkflowStartRequest { readonly workflowId: string; readonly input?: Readonly<Record<string, string>> }
+/** Task creation request; scheduledFor is omitted for immediate execution. */
+export interface WorkflowStartRequest {
+  readonly workflowId: string
+  readonly input?: Readonly<Record<string, string>>
+  readonly scheduledFor?: string
+}
 /** Identifier of an existing persisted task. */
 export interface WorkflowRunRequest { readonly runId: string }
 /** Human decision for a task awaiting review. */

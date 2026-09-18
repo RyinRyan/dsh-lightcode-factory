@@ -39,6 +39,7 @@ describe('Factory Demo Loader composition', () => {
       const adapter = new MockAdapter([
         toolCallResponse('demo-call', 'example_numbers', {}),
         textResponse('```javascript\nconsole.log(JSON.stringify({ sum: 28 }))\n```'),
+        [{ type: 'finish', reason: { kind: 'error', failure: { code: 'authentication', message: 'API key is missing' } } }],
       ])
       ctx.llm.registerAdapter(['mock'], adapter)
       ctx.tools.register(defineTool({ name: 'example_numbers', description: 'Return example numbers', parameters: {},
@@ -85,6 +86,12 @@ describe('Factory Demo Loader composition', () => {
       expect(task?.nodes[1]?.observations.find(event => event.kind === 'llm.request')?.detail).toContain('打印数组')
       await ctx.lightcodeFactoryRuntime.review({ runId: run.id, decision: 'complete' })
       expect((await ctx.lightcodeFactoryRuntime.listRuns({ limit: 100 })).runs[0]?.status).toBe('completed')
+      const failed = await ctx.lightcodeFactoryRuntime.start({ workflowId: 'morning-script-demo' })
+      await vi.waitFor(async () => {
+        const task = await ctx.lightcodeFactoryRuntime.getRun({ runId: failed.id })
+        expect(task.status).toBe('failed')
+        expect(task.error).toContain('Check the current DSH model and API key configuration')
+      }, { timeout: 15000 })
     } finally {
       await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })

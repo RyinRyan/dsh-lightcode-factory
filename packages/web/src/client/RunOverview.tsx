@@ -146,9 +146,10 @@ export function RunOverview({ run, t }: { run: WorkflowRunView; t: FactoryBoardP
 
   const selectedNode = run.nodes.find(node => node.id === selectedNodeId) ?? run.nodes[0]
   const currentNode = run.nodes.find(node => node.id === run.currentNodeId)
-  const startedAt = run.nodes.find(node => node.startedAt !== undefined)?.startedAt ?? run.createdAt
+  const startedAt = run.events.find(event => event.type === 'run.started')?.at
+    ?? run.nodes.find(node => node.startedAt !== undefined)?.startedAt
   const terminal = ['review', 'completed', 'cancelled', 'failed'].includes(run.status)
-  const elapsed = Math.max(0, Date.parse(run.updatedAt) - Date.parse(startedAt))
+  const elapsed = startedAt === undefined ? undefined : Math.max(0, Date.parse(run.updatedAt) - Date.parse(startedAt))
 
   const eventTimeline = <section className={css.fidelityEvents} data-open={eventsOpen}>
     <header>
@@ -209,11 +210,12 @@ export function RunOverview({ run, t }: { run: WorkflowRunView; t: FactoryBoardP
       {selectedNode !== undefined && <OutputWorkbench run={run} node={selectedNode} t={t} />}
       <aside className={css.fidelityRunSidebar}>
         <section className={css.fidelityRunInfo}><h2><span>ⓘ</span>{t('detail.runInfo')}</h2><dl>
-          <div><dt>{t('detail.status')}</dt><dd><i className={`${css.dot} ${css[run.status]}`} />{t(`status.${run.status}`)}</dd></div>
-          <div><dt>{t('detail.currentNode')}</dt><dd>{currentNode?.name ?? (terminal ? t('detail.allNodesComplete') : '—')}</dd></div>
-          <div><dt>{t('detail.startedAt')}</dt><dd>{new Date(startedAt).toLocaleString()}</dd></div>
+           <div><dt>{t('detail.status')}</dt><dd><i className={`${css.dot} ${css[run.status]}`} />{t(`status.${run.status}`)}</dd></div>
+           <div><dt>{t('detail.currentNode')}</dt><dd>{currentNode?.name ?? (terminal ? t('detail.allNodesComplete') : '—')}</dd></div>
+          {run.scheduledFor !== undefined && <div><dt>{t('detail.scheduledFor')}</dt><dd>{new Date(run.scheduledFor).toLocaleString()}</dd></div>}
+          {startedAt !== undefined && <div><dt>{t('detail.startedAt')}</dt><dd>{new Date(startedAt).toLocaleString()}</dd></div>}
           {terminal && <div><dt>{t('detail.finishedAt')}</dt><dd>{new Date(run.updatedAt).toLocaleString()}</dd></div>}
-          <div><dt>{t('detail.elapsed')}</dt><dd>{formatDuration(elapsed)}</dd></div>
+          {elapsed !== undefined && <div><dt>{t('detail.elapsed')}</dt><dd>{formatDuration(elapsed)}</dd></div>}
           <div><dt>{t('detail.workflow')}</dt><dd>{run.workflowId}{run.workflowVersion === undefined ? '' : ` @ ${run.workflowVersion}`}</dd></div>
         </dl></section>
         {run.status === 'review' && <section className={css.reviewNotice}><span>!</span><div><strong>{t('detail.manualReview')}</strong><p>{t('detail.reviewHint')}</p></div></section>}

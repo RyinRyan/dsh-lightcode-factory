@@ -17,6 +17,7 @@ Web 是共享 Browser 展示层，负责 Workflow Catalog、六状态看板、�
 - 首屏与轮询必须有界；只有存在 `nextCursor` 才显示加载更多。
 - 打开详情先用已有 page 投影响应，再调用 `getRun` 刷新最新聚合。
 - 新展示字段先扩展 Contracts/Runtime，不读取私有对象。
+- `datetime-local` 表示浏览器本地时间，提交前转为 ISO；Web 可做即时校验，但未来时间与执行资格仍由 Runtime 判定。
 - 未知 output/observation 必须安全回退。
 
 ## 3. 通用展示与可访问性
@@ -29,6 +30,6 @@ Web 是共享 Browser 展示层，负责 Workflow Catalog、六状态看板、�
 
 ## 4. 测试与完成
 
-覆盖 definition 表单、命令 pending/error、六状态看板、分页按钮、详情刷新、节点切换、JSON 回退、轨迹筛选/检查器、对话框键盘与 ARIA、无溢出/真实溢出。完整浏览器验收必须在 DSH 原生桌面页面和较窄窗口完成。
+覆盖 definition 表单、立即/定时提交与本地时间转换、命令 pending/error、六状态看板、计划时间展示、分页按钮、详情刷新、节点切换、JSON 回退、轨迹筛选/检查器、对话框键盘与 ARIA、无溢出/真实溢出。完整浏览器验收必须在 DSH 原生桌面页面和较窄窗口完成。
 
 完成前确认无状态写入、业务特例、Storage/Host 私有导入；locale、slot、timer/listener disposer、构建 external、architecture、统一页面契约和 README 已同步。

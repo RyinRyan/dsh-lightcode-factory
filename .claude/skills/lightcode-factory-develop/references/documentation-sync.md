@@ -16,12 +16,11 @@
 
 ## 2. 变更映射
 
-- `packages/<workflow>/src`：至少更新对应 Workflow 设计；若公开能力/限制或成员变化，再更新 README/architecture。
+- `packages/workflows/src/catalog/<id>`：至少更新对应 Workflow 设计与 Catalog 注册/测试；若公开能力或限制变化，再更新 README/architecture。独立 Workflow 包才同步其 manifest、workspace 和 Bundle 接线。
 - `packages/contracts/src`：更新 architecture；同步所有受影响消费者和契约规范。
 - `packages/runtime/src`：更新 architecture；涉及开发规则时更新 core/runtime/testing references；用户能力或配置变化更新 README。
 - `packages/storage-sqlite/src`：更新 architecture 和 Storage reference；涉及数据库位置、migration、备份、部署或 Bundle 时更新 README。
 - `packages/web/src`：更新 architecture 与 web-display/web-development；用户可见能力变化更新 README。
-- `packages/workflows/src/catalog/<id>`：至少更新对应 Workflow 设计；成员变化更新 README/architecture。
 - `packages/factory`、`scripts/build.mjs`、`scripts/pack.mjs`、manifest/lockfile：更新 README 的安装/打包/成员信息，必要时更新 architecture。
 - 测试变化若揭示了此前未记录的契约，也要反向刷新架构或 Skill，不能只修测试。
 

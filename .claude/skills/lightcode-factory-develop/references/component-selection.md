@@ -6,7 +6,7 @@
 
 依次回答：
 
-1. 能否仅通过一个业务 Workflow 的参数、顺序节点、output、observation、取消和评审实现？能则选择 Workflow。
+1. 能否仅通过一个业务 Workflow 的参数、顺序节点、output、observation、取消和评审实现？能则选择 Workflow；一次性定时只复用 `start(..., scheduledFor?)`，不进入 Workflow 实现。
 2. 是否改变跨组件类型、runtime schema、Workflow/Repository Port 或 Remote descriptor？是则选择 Contracts，并适配消费者。
 3. 是否改变多个 Workflow 共用的接纳、调度、状态决策、限制、恢复、Remote Host 或生命周期？是则选择 Runtime。
 4. 是否只改变 SQLite、事务、索引、schema migration、分页查询、备份或恢复？是则选择 Storage；需要新状态语义时选择 Contracts + Runtime + Storage。
@@ -23,7 +23,7 @@
 - 输入可由当前字符串参数表达；
 - 执行可由固定顺序节点表达；
 - 结果可用有界 JSON 或 artifact 引用表达；
-- 状态、取消、失败和评审可以完全复用 Runtime；
+- 状态、取消、失败、评审及立即/一次性定时接纳可以完全复用 Runtime；
 - 页面可通过通用 output 回退和轨迹表达。
 
 出现 DAG、重试、checkpoint、复杂/敏感输入、新状态、新命令或专属交互时，退出普通 Workflow 路径，重新分类。
@@ -67,6 +67,7 @@ Web 不拥有业务状态或执行。若 UI 需要 Runtime 未公开的事实，
 | 新增 PostgreSQL | Contracts 保持 Port，新增 Storage Adapter，Bundle 选择 | Runtime 内散落 SQL |
 | 某业务增加风险评分 | Workflow Catalog | Runtime 根据 workflowId 分支 |
 | 页面识别通用代码输出 | Web 设计跨 Workflow 字段语义 | 按节点名判断 |
-| 新增一个 Workflow 随产品安装 | Workflow + Bundle 接线 | 把业务逻辑写进 factory package |
+| 新增一个同边界的内置 Workflow | Catalog 新目录、Catalog 注册、测试与设计；不新增 Bundle 成员 | 把业务逻辑写进 factory package 或为它单独建页面 |
+| 新增一个边界不同的 Workflow | 独立 Host 包 + Bundle 接线 | 把重依赖或独立生命周期塞进 Catalog 根入口 |
 
 最终设计必须写明“选择的组件”“不选择其他组件的理由”和“跨层契约顺序”。

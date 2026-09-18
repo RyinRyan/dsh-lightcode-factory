@@ -10,7 +10,7 @@ LightCode Factory 是安装到 DSH 的独立 Workflow 工厂插件。它不修�
 
 ```powershell
 dsh --profile lightcode --from-default-profile web --dump-config
-dsh plugin --profile lightcode add "D:\develop\dsh-workflow\lightcode-factory\dist\lightcode-factory-0.3.0.tgz" --ignore-scripts
+dsh plugin --profile lightcode add "D:\develop\dsh-workflow\lightcode-factory\dist\lightcode-factory-0.4.0.tgz" --ignore-scripts
 dsh --profile lightcode --no-open --host 127.0.0.1 --port 3892
 ```
 
@@ -25,20 +25,20 @@ dsh plugin --profile lightcode remove lightcode-factory
 - SQLite：DSH home 下 `lightcode-factory/factory.sqlite3`
 - Workflow artifact：`lightcode-factory/artifacts/<runId>/`
 
-0.3 是破坏性架构版本，不读取旧 `workflow_platform.json`，也不承诺打开 0.2 SQLite。升级前应保留旧 Bundle 与数据库副本，再为 0.3 使用新数据库；没有自动兼容或双写。
+0.4 可把当前 0.3 SQLite schema v1 原地迁移为 schema v2；升级前仍应备份数据库。它不读取旧 `workflow_platform.json`，也不承诺打开 0.2 SQLite；没有自动兼容或双写。回滚到 0.3 必须恢复升级前的数据库副本。
 
 ## 包与职责
 
 | 包 | 职责 |
 | --- | --- |
 | `lightcode-factory-contracts` | 共享类型、Zod schema、Workflow/Repository Port、Remote v2 |
-| `lightcode-factory-runtime` | 任务注册、调度、状态决策、取消、评审、恢复、Remote Host 和 Browser Client |
+| `lightcode-factory-runtime` | 任务注册、立即/一次性定时调度、状态决策、取消、评审、恢复、Remote Host 和 Browser Client |
 | `lightcode-factory-storage-sqlite` | SQLite schema、事务、revision、seek 分页、索引和一致性备份 |
 | `lightcode-factory-workflows` | `morning-script-demo` 与 `release-readiness` 内置 Catalog |
 | `lightcode-factory-web` | Catalog 表单、六状态看板、加载更多、运行详情和轨迹 |
 | `lightcode-factory` | 安装装配；不包含业务逻辑 |
 
-页面首次读取最多 60 条 run，轮询只刷新第一页；历史通过 opaque cursor 加载更多，详情通过单条查询刷新。SQLite backup API 可生成不覆盖的一致性副本。
+新建任务可选择立即执行或指定浏览器本地日期时间进行一次性定时执行。定时任务以 durable `queued` 保存，到点才占用并发槽；Host 重启后由相同 workflow id/version 恢复，到点前可取消。页面首次读取最多 60 条 run，轮询只刷新第一页；历史通过 opaque cursor 加载更多，详情通过单条查询刷新。SQLite backup API 可生成不覆盖的一致性副本。
 
 ## 新增内置 Workflow
 
@@ -77,7 +77,7 @@ npm.cmd run pack
 
 构建依赖锁定在 `package-lock.json`。Host 与 Browser 共享宿主 Cordis/React/DSH 能力，不内嵌第二套框架。最终 Bundle 内含五个真实成员包，Contracts 作为 library 随包发布但不在 Cordis patch 中单独启动。
 
-0.3.0 已在全新隔离 DSH profile 完成真实 Bundle 安装和 Host 启动，并通过发布就绪任务的创建、执行、详情、轨迹、评审闭环以及 390×844 窄屏验收。实际 SQLite 数据库完成 schema/index 检查、在线备份和从备份重开读取。全量测试为 6 个测试文件、22 项测试；候选包 SHA-256 为 `7A214CF77054A1D141734F79DE2EC3C3C637DF19770AF6E519A68CB3DBA8F8F4`。
+0.4.0 增加一次性定时执行、重启恢复、到期前取消和 SQLite schema v2 migration。晨间脚本若模型未完成会明确提示检查当前 DSH 模型与 API Key 配置；凭据仍只由 DSH 管理，不进入 Factory 数据。当前候选包的最终测试、隔离安装和浏览器验收结果记录在 [定时执行变更设计](.design/changes/scheduled-workflow-runs.md)。0.3.0 的历史发布证据保留在 [迁移记录](docs/migration.md)。
 
 本仓库还包含 DSH/Cordis 插件教学站：
 
@@ -92,7 +92,9 @@ npm run docs:serve
 - 参数会持久化并显示，禁止输入密码、Token、私钥或完整私有 prompt。
 - 当前 Workflow 是可信进程内插件，不隔离恶意代码。
 - Demo 会调用当前模型并执行生成脚本；必须使用合适的宿主沙箱策略并人工审查。
+- 晨间脚本依赖当前 DSH Profile 已配置且可用的模型与 API Key；Factory 不读取或代管凭据。
 - 当前只支持顺序节点，没有 DAG、checkpoint、自动重试或跨进程 Worker。
+- 定时执行是单 Host 的一次性内存 timer 加 durable 计划；停机期间不会执行，恢复后已过期任务会立即排队，不支持 Cron、重复任务或分布式 lease。
 - SQLite 只支持一个 Host 和本机持久卷；不支持网络共享、多主写或高可用。
 - 当前 Node 24.11 的 `node:sqlite` 会发出实验特性警告；生产发布必须固定并验证 Node/SQLite 版本。
 - Remote 已分页，但仍采用轮询；没有 SSE/推送和自动归档。

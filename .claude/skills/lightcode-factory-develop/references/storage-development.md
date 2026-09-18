@@ -22,6 +22,7 @@
 ## 3. Migration、备份与恢复
 
 - migration 单向、按版本记录，启动完成后才提供 Repository。
+- 新增 nullable 调度字段时，历史 NULL 的运行语义必须明确；迁移同时更新 migration 表与 `PRAGMA user_version`，并用带旧数据的数据库验证。
 - 不支持的数据版本明确拒绝启动，不能静默读取或部分迁移。
 - 在线备份使用 SQLite backup API，目标不得覆盖，且不得等于活动数据库。
 - 恢复通过停止旧连接、以备份启动新 Repository 并核对数据演练；运行中原地覆盖禁止。

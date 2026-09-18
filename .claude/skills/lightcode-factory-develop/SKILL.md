@@ -32,11 +32,11 @@ Factory Bundle：只负责安装装配
 - Contracts：跨 Host/Browser/Storage/Workflow 的稳定类型、schema 或 Port；
 - Runtime：共享接纳、调度、状态决策、取消、评审、恢复、Remote 或生命周期；
 - SQLite Storage：持久化介质、migration、事务、索引、分页、备份或恢复；
-- Workflow Catalog：内置业务流程的参数、节点、执行、输出与观测；
+- Workflow Catalog：内置业务流程的参数、顺序节点、执行、输出与观测；同发布/权限/依赖边界时默认在一个 Catalog 内按 id 分目录；
 - Web：共享 Browser 信息架构、交互、renderer、轨迹或响应式行为；
 - Factory Bundle：只在成员、安装或发布装配变化时接线。
 
-普通 Workflow 无法表达需求时，不得在业务目录私建状态机或页面特例；应改判为 Contracts/Runtime/Web 扩展。
+普通 Workflow 无法表达需求时，不得在业务目录私建状态机、timer 或页面特例；应改判为 Contracts/Runtime/Web 扩展。一次性 `scheduledFor` 是 Runtime 的通用接纳能力，不是 Workflow 参数或节点。
 
 ### Gate 3：设计先行
 
@@ -59,7 +59,7 @@ node .claude/skills/lightcode-factory-develop/scripts/init-factory-change.mjs <c
 - Contracts：只放公开类型、runtime schema、Port 和 Remote descriptor；不放 Service、SQL、React 或文件系统逻辑。
 - Runtime：完整读取 [Runtime 开发规范](references/runtime-development.md)。保持单一状态所有者，协同演进 schema、Repository、Remote、Host 与 Browser Client。
 - SQLite Storage：完整读取 [Storage 开发规范](references/storage-development.md)。实现 Contracts Repository Port，不决定状态转换，覆盖 migration、事务、revision、分页与备份。
-- Workflow Catalog：完整读取 [Workflow 实现规范](references/workflow-implementation.md) 和 [统一页面契约](references/web-display-contract.md)。每个 id 一个目录，顺序 `await run.node(...)`，输出 JSON-safe，观测有界。
+- Workflow Catalog：完整读取 [Workflow 实现规范](references/workflow-implementation.md) 和 [统一页面契约](references/web-display-contract.md)。先判定 Catalog 内置或独立包边界；每个 id 一个目录，顺序 `await run.node(...)`，输出 JSON-safe，观测有界。
 - Web：完整读取 [Web 开发规范](references/web-development.md) 和 [统一页面契约](references/web-display-contract.md)。只消费 Runtime Browser Client，保证通用回退、分页、可访问交互和无业务特例。
 - 跨组件：按 `Contracts -> Runtime/Storage -> Runtime Client -> Web/Workflows -> Bundle` 推进。
 

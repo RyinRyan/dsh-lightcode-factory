@@ -1,7 +1,7 @@
 # {{WORKFLOW_NAME}} Workflow 设计
 
 - Workflow ID: `{{WORKFLOW_ID}}`
-- 包名: `lightcode-workflow-{{WORKFLOW_ID}}`
+- 承载方式: [填写：Catalog `packages/workflows/src/catalog/{{WORKFLOW_ID}}/` / 独立 Host 包]
 - 设计状态: 草稿
 - 底座适配类型: [填写：普通 Workflow / 平台能力扩展]
 
@@ -11,7 +11,7 @@
 
 ## 2. 底座适配结论
 
-[填写：说明现有参数、顺序节点、输出、观测、统一页面、取消和评审是否足够。若不够，列出平台缺口和影响范围。]
+[填写：说明现有参数、顺序节点、输出、观测、统一页面、取消、评审和一次性定时接纳是否足够。若不够，列出平台缺口和影响范围；说明为何选择 Catalog 或独立包。]
 
 ## 3. 输入参数
 
@@ -39,7 +39,7 @@
 
 ## 7. 状态、失败与取消
 
-[填写：正常路径、错误传播、超时、取消信号传递、评审和终态。不得由 Workflow 私自写 run 状态。]
+[填写：正常路径、错误传播、超时、取消信号传递、评审和终态。若用户可选定时，说明其复用 Runtime `scheduledFor`，不由 Workflow 建 timer 或恢复计划。]
 
 ## 8. 安全与数据边界
 
@@ -51,11 +51,11 @@
 
 ## 10. Workspace 与 Bundle 接线
 
-[填写：包 manifest、TypeScript references、build、pack、Factory dependencies、bundleDependencies、patch 和 lockfile。]
+[填写：若为 Catalog，填写目录、Catalog 注册、配置和测试；若为独立包，填写 manifest、TypeScript references、build、pack、Factory dependencies、bundleDependencies、patch 和 lockfile。]
 
 ## 11. 测试与验收
 
-[填写：节点单测、真实 Runtime/Storage/Loader 组合、disposer、参数、成功、失败/取消、评审、页面节点切换、轨迹、tarball 和隔离安装。]
+[填写：节点单测、真实 Runtime/Storage/Loader 组合、disposer、参数、成功、失败/取消、评审；按影响范围补充定时接纳、页面节点切换、轨迹、tarball 和隔离安装。]
 
 ## 12. 文档同步
 
@@ -69,12 +69,12 @@
 
 - [ ] 所有用户目标都有节点或输出承接。
 - [ ] 需求可由当前底座表达，或已明确列出平台扩展并取得授权。
-- [ ] Workflow 是独立 Host 插件，不需要专属 Browser Client。
+- [ ] Workflow 选择了 Catalog 或独立 Host 包，不需要专属 Browser Client。
 - [ ] 节点声明、执行顺序和页面顺序一致。
 - [ ] 每个 output 都是有界 JSON-safe 数据或 artifact 引用。
 - [ ] 运行详情只显示节点结果，内部过程只进入轨迹。
 - [ ] 页面无需按 Workflow id、包名或节点名称增加特例。
 - [ ] 参数、输出和观测均不包含 credential。
 - [ ] 取消信号、错误和资源释放路径明确。
-- [ ] Workspace、Bundle、测试、打包和隔离验收接线完整。
+- [ ] Catalog 或独立包所需的 workspace、Bundle、测试、打包和隔离验收接线完整。
 - [ ] 相关 architecture、README 和 Skill 文档的同步范围与理由完整。

@@ -10,7 +10,12 @@ describe('Factory contracts', () => {
       nodes: [], events: [],
     }
     expect(() => workflowRunSchema.parse(base)).toThrow()
-    expect(workflowRunSchema.parse({ ...base, workflowVersion: '1.0.0', input: {} })).toMatchObject({ id: 'one' })
+    expect(workflowRunSchema.parse({
+      ...base, workflowVersion: '1.0.0', input: {}, scheduledFor: '2026-09-19T01:00:00.000Z',
+    })).toMatchObject({ id: 'one', scheduledFor: '2026-09-19T01:00:00.000Z' })
+    expect(() => workflowRunSchema.parse({
+      ...base, workflowVersion: '1.0.0', input: {}, scheduledFor: 'tomorrow',
+    })).toThrow()
   })
 
   it('publishes only the bounded version 2 remote operations', () => {

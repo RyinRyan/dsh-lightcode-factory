@@ -7,7 +7,7 @@
 1. [核心契约](core-contract.md)：组件稳定边界、状态所有权和强制规则。
 2. [仓库探索](repository-discovery.md)：从当前 checkout 获取接口、schema、构建和页面事实。
 3. [组件选择](component-selection.md)：判断需求属于 Contracts、Runtime、Storage、Workflow Catalog、Web 还是跨组件。
-4. Workflow 路径：[设计门禁](design-template.md) -> [实现规范](workflow-implementation.md)。
+4. Workflow 路径：[设计门禁](design-template.md) -> [实现规范](workflow-implementation.md)。先决定放入 `packages/workflows/src/catalog/<id>/` 还是建立独立包；内置业务默认选 Catalog。
 5. Contracts/Runtime 路径：[底座变更设计](change-design.md) -> [Runtime 开发规范](runtime-development.md)。
 6. Storage 路径：[底座变更设计](change-design.md) -> [Storage 开发规范](storage-development.md)。
 7. Web 路径：[底座变更设计](change-design.md) -> [Web 开发规范](web-development.md) -> [统一页面契约](web-display-contract.md)。

@@ -7,7 +7,8 @@ export const workflowRunSchema = z.object({
   id: z.string(), workflowId: z.string(), name: z.string(),
   workflowVersion: z.string(), input: z.record(z.string(), z.string()),
   status: z.enum(['queued', 'running', 'review', 'completed', 'cancelled', 'failed']),
-  createdAt: z.string(), updatedAt: z.string(), currentNodeId: z.string().optional(), error: z.string().optional(),
+  createdAt: z.string(), updatedAt: z.string(), scheduledFor: z.string().datetime().optional(),
+  currentNodeId: z.string().optional(), error: z.string().optional(),
   nodes: z.array(z.object({
     id: z.string(), name: z.string(),
     status: z.enum(['pending', 'running', 'completed', 'cancelled', 'failed']),

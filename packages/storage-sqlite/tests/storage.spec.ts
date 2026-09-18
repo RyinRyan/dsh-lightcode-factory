@@ -11,13 +11,14 @@ afterEach(async () => {
   for (const path of cleanup.splice(0).reverse()) await rm(path, { recursive: true, force: true })
 })
 
-function run(id: string, status: WorkflowRunView['status'] = 'queued', minute = 0): WorkflowRunView {
+function run(id: string, status: WorkflowRunView['status'] = 'queued', minute = 0, scheduledFor?: string): WorkflowRunView {
   const at = `2026-09-18T01:${String(minute).padStart(2, '0')}:00.000Z`
   return {
     id, workflowId: 'release-readiness', workflowVersion: '1.0.0', input: { project: 'factory' },
     name: 'Release readiness', status, createdAt: at, updatedAt: at,
     nodes: [{ id: 'prepare', name: 'Prepare', status: 'pending', observations: [] }],
     events: [{ sequence: 1, at, type: 'run.queued', message: 'queued' }],
+    ...(scheduledFor === undefined ? {} : { scheduledFor }),
   }
 }
 
@@ -77,6 +78,36 @@ describe('SQLite workflow run repository', () => {
     await repository.createRun(run('done', 'completed', 2))
     expect((await repository.listInterruptedRuns()).map(value => value.run.id)).toEqual(['queued', 'running'])
     repository.close()
+  })
+
+  it('round-trips the durable scheduled time', async () => {
+    const { repository } = await temporaryRepository()
+    const scheduledFor = '2026-09-19T01:00:00.000Z'
+    await repository.createRun(run('scheduled', 'queued', 0, scheduledFor))
+    expect((await repository.getRun('scheduled'))?.run.scheduledFor).toBe(scheduledFor)
+    repository.close()
+  })
+
+  it('migrates a version 1 database in place without losing runs', async () => {
+    const { databasePath, repository } = await temporaryRepository()
+    await repository.createRun(run('legacy'))
+    repository.close()
+
+    const legacy = new DatabaseSync(databasePath)
+    legacy.exec('ALTER TABLE factory_runs DROP COLUMN scheduled_for')
+    legacy.exec('DELETE FROM factory_schema_migrations WHERE version = 2')
+    legacy.exec('PRAGMA user_version = 1')
+    legacy.close()
+
+    const migrated = new SqliteWorkflowRunRepository(databasePath)
+    await migrated.open()
+    expect((await migrated.getRun('legacy'))?.run.id).toBe('legacy')
+    migrated.close()
+    const inspected = new DatabaseSync(databasePath)
+    expect((inspected.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2)
+    expect(inspected.prepare('PRAGMA table_info(factory_runs)').all()
+      .map(value => String((value as { name: string }).name))).toContain('scheduled_for')
+    inspected.close()
   })
 
   it('creates a consistent non-overwriting backup that can be reopened', async () => {

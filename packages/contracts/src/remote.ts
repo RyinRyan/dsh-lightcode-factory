@@ -19,7 +19,10 @@ const listRequest: z.ZodType<WorkflowRunListRequest> = z.object({
   statuses: z.array(z.enum(['queued', 'running', 'review', 'completed', 'cancelled', 'failed'])).max(6).optional(),
 })
 const page: z.ZodType<WorkflowRunPage> = z.object({ runs: z.array(workflowRunSchema), nextCursor: z.string().optional() })
-const start: z.ZodType<WorkflowStartRequest> = z.object({ workflowId: z.string(), input: z.record(z.string(), z.string()).optional() })
+const start: z.ZodType<WorkflowStartRequest> = z.object({
+  workflowId: z.string(), input: z.record(z.string(), z.string()).optional(),
+  scheduledFor: z.string().max(64).datetime().optional(),
+})
 const run: z.ZodType<WorkflowRunRequest> = z.object({ runId: z.string() })
 const review: z.ZodType<WorkflowReviewRequest> = z.object({ runId: z.string(), decision: z.enum(['complete', 'cancel']) })
 

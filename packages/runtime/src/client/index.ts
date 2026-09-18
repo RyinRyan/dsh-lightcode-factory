@@ -24,7 +24,7 @@ export interface ILightcodeFactoryClient {
   refresh(): Promise<void>
   loadMore(): Promise<void>
   getRun(runId: string): Promise<WorkflowRunView>
-  start(workflowId: string, input?: Readonly<Record<string, string>>): Promise<WorkflowRunView>
+  start(workflowId: string, input?: Readonly<Record<string, string>>, scheduledFor?: string): Promise<WorkflowRunView>
   cancel(runId: string): Promise<WorkflowRunView>
   review(runId: string, decision: 'complete' | 'cancel'): Promise<WorkflowRunView>
 }
@@ -97,8 +97,10 @@ export class LightcodeFactoryClient extends Service implements ILightcodeFactory
     return result.value
   }
 
-  async start(workflowId: string, input?: Readonly<Record<string, string>>): Promise<WorkflowRunView> {
-    return this.command(this.remote.start({ workflowId, ...(input === undefined ? {} : { input }) }))
+  async start(workflowId: string, input?: Readonly<Record<string, string>>, scheduledFor?: string): Promise<WorkflowRunView> {
+    return this.command(this.remote.start({ workflowId,
+      ...(input === undefined ? {} : { input }), ...(scheduledFor === undefined ? {} : { scheduledFor }),
+    }))
   }
 
   async cancel(runId: string): Promise<WorkflowRunView> {

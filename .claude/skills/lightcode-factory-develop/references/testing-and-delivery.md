@@ -14,6 +14,7 @@
 
 - registration/disposer、参数、合法/非法状态、节点顺序、输出/观测限制；
 - admission、queued/running cancel、晚到结果、revision 竞态；
+- 一次性定时任务不到点/到点、取消竞态、长 timer、Workflow 卸载重注册、Runtime 重启恢复和版本不匹配；
 - 并发补位、Catalog 卸载、Runtime stop、Host 重启；
 - cursor/limit、catalog/list/get/start/cancel/review；
 - Browser Client refresh/loadMore/getRun/command 与 polling disposer。
@@ -24,7 +25,7 @@
 - aggregate create/get/page/save round-trip；
 - seek 分页边界、稳定排序、状态过滤和 limit；
 - revision 冲突与事务失败无部分写入；
-- migration、在线备份不覆盖、停止后从备份重开恢复；
+- migration（含带历史数据的 user_version 升级）、计划时间 NULL/ISO round-trip、在线备份不覆盖、停止后从备份重开恢复；
 - Runtime 真实组合与连接关闭。
 
 ### Workflow Catalog
@@ -35,7 +36,7 @@
 
 ### Web
 
-- definition 表单、命令 pending/error、六状态看板；
+- definition 表单、立即/定时提交、本地时间转 ISO、命令 pending/error、六状态看板与计划时间展示；
 - next cursor 控制加载更多，loading-more 防重复；
 - 打开详情触发 getRun，节点 output/error 切换，未知 JSON 回退；
 - observation 只进入轨迹，筛选/检查器正确；

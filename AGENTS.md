@@ -33,6 +33,7 @@
 - `node.output` 是最终结果，observation 是执行过程；二者不得混用。
 - 参数、输出、观测和事件会持久化并发送 Browser；禁止 credential、私钥、完整私有 prompt、无界日志和机器绝对路径。
 - Repository 列表必须有界并使用 seek cursor；禁止重新引入全历史 snapshot。
+- 一次性定时任务使用 durable `queued + scheduledFor`；timer、到点释放、取消和重启恢复只属于 Runtime，Storage/Web/Workflow 不得自行调度。只有相同 workflow id/version 能恢复计划。
 - SQLite 只支持单 Host、本地持久卷；网络共享、多主写和高可用需要新的 Adapter/控制面设计。
 - 当前只支持可信进程内插件、文本参数、顺序节点、人工评审；不得声称已支持 DAG、checkpoint、自动重试、多租户或高可用。
 
@@ -57,4 +58,4 @@ npm.cmd run build
 
 涉及 Bundle/数据库时还需 `npm.cmd run pack`、tarball 检查、隔离 DSH 安装/启动、真实核心交互、分页、重启读取和备份恢复。不能用 typecheck、HTTP 200、dump-config 或局部截图代替对应行为验收。
 
-TypeScript 只能使用公开 package exports，禁止跨包 `src/*`；Host/Browser 入口分离；Cordis 注册、timer、controller 和资源必须由 effect/disposer 管理。Runtime mutation 串行，Storage 事务化并用 revision CAS，取消、卸载、停止和晚到结果必须有竞态测试。
+TypeScript 只能使用公开 package exports，禁止跨包 `src/*`；Host/Browser 入口分离；Cordis 注册、timer、controller 和资源必须由 effect/disposer 管理。Runtime mutation 串行，Storage 事务化并用 revision CAS，取消、卸载、停止、重启恢复和晚到 timer/结果必须有竞态测试。

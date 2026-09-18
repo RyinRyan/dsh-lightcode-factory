@@ -21,6 +21,7 @@ Contracts 不能依赖 Runtime。Runtime 不能依赖 `storage-sqlite`。Web 和
 - 同一 run mutation 串行，按 Repository revision 保存；durable 写成功后才发布。
 - 取消先保存终态，再 abort；晚到 output/observation 不得覆盖终态。
 - 队列必须处理 queued cancel、Catalog 卸载、admission 中卸载、Runtime stop 和 finally 补位。
+- 一次性计划使用 durable `queued + scheduledFor`：未到点不进入 runnable queue、不占并发槽；到点和取消竞态必须重读 durable status。长计划分段布防，Runtime stop 清 timer，相同 workflow id/version 注册后才恢复。
 - 重试/恢复必须显式设计 attempt、幂等、副作用和 checkpoint；不能只加内存循环。
 - registration disposer 必须阻止新 run，并取消/等待已捕获 implementation 的任务。
 
@@ -34,7 +35,7 @@ Contracts 不能依赖 Runtime。Runtime 不能依赖 `storage-sqlite`。Web 和
 
 ## 4. 测试要求
 
-覆盖 registration/disposer、参数校验、正常和非法状态、节点顺序、输出/观测限制、取消与晚到结果、revision 竞态、Catalog 卸载、Runtime stop、重启中断、cursor/limit、Remote descriptor 以及 Client 刷新/分页/disposer。真实组合使用 SQLite Adapter、Typert 和公开 Cordis lifecycle。
+覆盖 registration/disposer、参数校验、正常和非法状态、节点顺序、输出/观测限制、取消与晚到结果、revision 竞态、Catalog 卸载、Runtime stop、重启中断、定时不到点/到点/取消/卸载重注册/重启恢复/版本不匹配、cursor/limit、Remote descriptor 以及 Client 刷新/分页/disposer。真实组合使用 SQLite Adapter、Typert 和公开 Cordis lifecycle。
 
 ## 5. 完成检查
 

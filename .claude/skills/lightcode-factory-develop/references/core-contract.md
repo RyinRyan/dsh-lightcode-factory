@@ -10,11 +10,11 @@ LightCode Factory 是统一运行底座：
 - Runtime 负责 Workflow 注册、任务接纳、调度、状态转换、取消、评审和 Browser 接口；
 - Storage 实现 Contracts 定义的 Repository Port，负责 durable 事务、查询、migration、备份和生命周期；
 - Web 负责工作流选择、统一看板、运行详情、节点输出、事件时间线和轨迹；
-- 业务 Workflow 是独立 Host 插件，只负责参数、顺序节点、业务执行、节点输出和节点内部观测。
+- 业务 Workflow 是独立注册单元，只负责参数、顺序节点、业务执行、节点输出和节点内部观测；同发布、权限、依赖和生命周期边界的内置 Workflow 组成一个 Catalog Host 包。
 
 Runtime 是 durable run 状态和生命周期的唯一决策者；Storage 是基础设施适配器；Web 是统一 Browser 投影；Workflow 是业务执行扩展；Contracts 是跨组件契约权威。Factory Bundle 只负责安装装配。
 
-Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注销；不复制底座、不改变其他 Workflow，也不要求专属页面才能运行。
+Workflow 的“可插拔”含义是：Catalog 或独立包安装并装配后出现，卸载后注销；不复制底座、不改变其他 Workflow，也不要求专属页面才能运行。
 
 ## 2. 组件选择与平台扩展
 
@@ -53,6 +53,7 @@ Workflow 的“可插拔”含义是：安装并装配后出现，卸载后注�
 - Runtime 是 run 状态和生命周期事件的唯一决策者。
 - Workflow 不修改 run 状态，不发送 run 生命周期事件，不建立第二套持久状态机。
 - 节点失败通过抛错表达，取消通过共享信号表达，完成和评审由 Runtime 判定。
+- `scheduledFor` 表达通用的一次性接纳计划；Workflow 既不校验计划时间，也不创建 timer、到点入队或重启恢复。
 
 ### Contracts 与 Runtime 契约
 

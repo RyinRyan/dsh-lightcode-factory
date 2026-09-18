@@ -114,6 +114,114 @@ describe('Factory workflow protocol', () => {
     await vi.waitFor(async () =>{  expect((await runtime.listRuns({ limit: 100 })).runs[0]?.status).toBe('failed') })
   })
 
+  it('persists a one-time schedule and releases it only after the due time', async () => {
+    const { runtime } = await setup()
+    const execute = vi.fn(async (context) => {
+      await context.node(node, async () => ({ ready: true }))
+    })
+    runtime.registerWorkflow(workflow(execute))
+    const scheduledFor = new Date(Date.now() + 180).toISOString()
+    const created = await runtime.start({ workflowId: 'report', input: { subject: 'scheduled' }, scheduledFor })
+
+    expect(created).toMatchObject({ status: 'queued', scheduledFor })
+    expect(created.events.map(event => event.type)).toEqual(['run.scheduled'])
+    expect(execute).not.toHaveBeenCalled()
+    await vi.waitFor(async () => {
+      expect((await runtime.getRun({ runId: created.id })).status).toBe('review')
+    }, { timeout: 2_000 })
+    expect(execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a scheduled run without executing it', async () => {
+    const { runtime } = await setup()
+    const execute = vi.fn(async () => {})
+    runtime.registerWorkflow(workflow(execute))
+    const created = await runtime.start({
+      workflowId: 'report', input: { subject: 'cancelled' },
+      scheduledFor: new Date(Date.now() + 180).toISOString(),
+    })
+
+    const cancelled = await runtime.cancel({ runId: created.id })
+    expect(cancelled.status).toBe('cancelled')
+    await new Promise(resolve => setTimeout(resolve, 250))
+    expect(execute).not.toHaveBeenCalled()
+    expect((await runtime.getRun({ runId: created.id })).status).toBe('cancelled')
+  })
+
+  it('recovers a durable schedule after the runtime restarts', async () => {
+    const { ctx, runtime, fiber } = await setup()
+    const firstExecute = vi.fn(async () => {})
+    runtime.registerWorkflow(workflow(firstExecute))
+    const created = await runtime.start({
+      workflowId: 'report', input: { subject: 'restart' },
+      scheduledFor: new Date(Date.now() + 300).toISOString(),
+    })
+
+    await fiber.dispose()
+    expect(firstExecute).not.toHaveBeenCalled()
+    const nextFiber = ctx.plugin(Runtime, { maxConcurrentRuns: 1 })
+    await nextFiber
+    const nextExecute = vi.fn(async (context) => {
+      await context.node(node, async () => ({ recovered: true }))
+    })
+    ctx.lightcodeFactoryRuntime.registerWorkflow(workflow(nextExecute))
+
+    await vi.waitFor(async () => {
+      expect((await ctx.lightcodeFactoryRuntime.getRun({ runId: created.id })).status).toBe('review')
+    }, { timeout: 2_000 })
+    expect(nextExecute).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a scheduled run durable while its workflow plugin is unloaded', async () => {
+    const { runtime } = await setup()
+    const firstExecute = vi.fn(async () => {})
+    const dispose = runtime.registerWorkflow(workflow(firstExecute))
+    const created = await runtime.start({
+      workflowId: 'report', input: { subject: 'reload' },
+      scheduledFor: new Date(Date.now() + 250).toISOString(),
+    })
+
+    await dispose()
+    expect((await runtime.getRun({ runId: created.id })).status).toBe('queued')
+    expect(firstExecute).not.toHaveBeenCalled()
+    const nextExecute = vi.fn(async (context) => {
+      await context.node(node, async () => ({ reloaded: true }))
+    })
+    runtime.registerWorkflow(workflow(nextExecute))
+    await vi.waitFor(async () => {
+      expect((await runtime.getRun({ runId: created.id })).status).toBe('review')
+    }, { timeout: 2_000 })
+    expect(nextExecute).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails a recovered schedule rather than running it with a different workflow version', async () => {
+    const { ctx, runtime, fiber } = await setup()
+    runtime.registerWorkflow(workflow(async () => {}))
+    const created = await runtime.start({
+      workflowId: 'report', input: { subject: 'old version' },
+      scheduledFor: new Date(Date.now() + 500).toISOString(),
+    })
+    await fiber.dispose()
+
+    const nextFiber = ctx.plugin(Runtime, { maxConcurrentRuns: 1 })
+    await nextFiber
+    const execute = vi.fn(async () => {})
+    ctx.lightcodeFactoryRuntime.registerWorkflow({ ...workflow(execute), version: '2.0.0' })
+    await vi.waitFor(async () => {
+      expect((await ctx.lightcodeFactoryRuntime.getRun({ runId: created.id })).status).toBe('failed')
+    })
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid or non-future schedule', async () => {
+    const { runtime } = await setup()
+    runtime.registerWorkflow(workflow(async () => {}))
+    await expect(runtime.start({ workflowId: 'report', input: { subject: 'invalid' }, scheduledFor: 'later' }))
+      .rejects.toThrow('Scheduled time is invalid')
+    await expect(runtime.start({ workflowId: 'report', input: { subject: 'past' }, scheduledFor: new Date(0).toISOString() }))
+      .rejects.toThrow('Scheduled time must be in the future')
+  })
+
   it('rejects pre-0.3 aggregates and malformed cursors', async () => {
     expect(() => workflowRunSchema.parse({ id: 'old' })).toThrow()
     const { runtime } = await setup()

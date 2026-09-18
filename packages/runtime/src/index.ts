@@ -31,6 +31,7 @@ const DEFAULT_MAX_CONCURRENT_RUNS = 2
 const DEFAULT_OUTPUT_BYTES = 1024 * 1024
 const DEFAULT_MAX_NODE_OBSERVATIONS = 128
 const DEFAULT_MAX_OBSERVATION_CHARS = 16 * 1024
+const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 /** Host service for durable tasks and complete workflow registrations. */
 export class LightcodeFactoryRuntime extends TypertRemoteService {
@@ -45,12 +46,14 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
   private readonly definitions = new Map<string, WorkflowRegistration>()
   private readonly accepted = new Map<string, WorkflowRegistration>()
   private readonly tasks = new Map<string, Promise<void>>()
-  private readonly admissions = new Set<Promise<WorkflowRunView>>()
+  private readonly admissions = new Set<Promise<unknown>>()
   private readonly mutations = new Map<string, Promise<unknown>>()
   private stopped = false
   private readonly subscribers = new Set<() => void>()
   private readonly controllers = new Map<string, AbortController>()
   private readonly queuedIds: string[] = []
+  private readonly scheduledTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly recoverableScheduled = new Map<string, StoredWorkflowRun>()
   private activeCount = 0
   private pumping = false
   private readonly config: ResolvedConfig
@@ -69,6 +72,8 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
     }), 'factory: wire contract')
     this.ctx.effect(() => async () => {
       this.stopped = true
+      for (const timer of this.scheduledTimers.values()) clearTimeout(timer)
+      this.scheduledTimers.clear()
       await Promise.allSettled(this.admissions)
       for (const controller of this.controllers.values()) controller.abort(new Error('Runtime stopped'))
       await Promise.allSettled(this.tasks.values())
@@ -76,6 +81,10 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
     }, 'lightcode factory: drain runtime work')
     for (const stored of await this.repository.listInterruptedRuns()) {
       const run = stored.run
+      if (run.status === 'queued' && run.scheduledFor !== undefined) {
+        this.recoverableScheduled.set(run.id, stored)
+        continue
+      }
       await this.save(this.appendEvent(this.clearCurrentNode({ ...run, status: 'failed', updatedAt: this.now(), error: 'Host restarted during execution' }), 'run.failed', 'DSH 重启导致执行中断'), stored.revision)
     }
     this.pump()
@@ -96,13 +105,29 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
     if (fields.some(field => !field) || new Set(fields).size !== fields.length) throw new Error('Duplicate or empty parameter name')
     const captured = { ...structuredClone(this.metadata(registration)), execute: registration.execute }
     this.definitions.set(captured.id, captured)
+    const recovery = this.recoverScheduledRuns(captured)
+    this.admissions.add(recovery)
+    void recovery.then(
+      () => { this.admissions.delete(recovery) },
+      (error: unknown) => {
+        this.admissions.delete(recovery)
+        this.ctx.logger.error('Factory scheduled recovery failed', error)
+      },
+    )
     return async () => {
       this.definitions.delete(captured.id)
       await Promise.allSettled(this.admissions)
       const ids = [...this.accepted].filter(([, value]) => value === captured).map(([id]) => id)
       for (const runId of ids) {
         const stored = await this.repository.getRun(runId)
-        if (stored !== undefined && ['queued', 'running'].includes(stored.run.status)) await this.cancel({ runId })
+        if (stored?.run.status === 'queued' && stored.run.scheduledFor !== undefined) {
+          this.clearScheduledTimer(runId)
+          this.removeQueuedId(runId)
+          this.accepted.delete(runId)
+          this.recoverableScheduled.set(runId, stored)
+        } else if (stored !== undefined && ['queued', 'running'].includes(stored.run.status)) {
+          await this.cancel({ runId })
+        }
       }
       await Promise.allSettled(ids.flatMap((id) => {
         const task = this.tasks.get(id)
@@ -114,6 +139,28 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
   private metadata(value: WorkflowRegistration): WorkflowDefinition {
     const { id, name, description, version, nodes, parameters } = value
     return { id, name, description, version, nodes, parameters }
+  }
+
+  private async recoverScheduledRuns(registration: WorkflowRegistration): Promise<void> {
+    for (const [runId, candidate] of this.recoverableScheduled) {
+      if (candidate.run.workflowId !== registration.id) continue
+      const stored = await this.repository.getRun(runId)
+      if (this.stopped || this.definitions.get(registration.id) !== registration) return
+      if (stored?.run.status !== 'queued' || stored.run.scheduledFor === undefined) {
+        this.recoverableScheduled.delete(runId)
+        continue
+      }
+      this.recoverableScheduled.delete(runId)
+      if (stored.run.workflowVersion !== registration.version) {
+        const message = `Scheduled workflow version ${stored.run.workflowVersion} is unavailable`
+        await this.update(runId, run => this.appendEvent({ ...run, status: 'failed', error: message,
+          nodes: run.nodes.map(node => node.status === 'pending' ? { ...node, status: 'failed', error: message } : node),
+        }, 'run.failed', message))
+        continue
+      }
+      this.accepted.set(runId, registration)
+      this.armScheduledRun(runId, stored.run.scheduledFor)
+    }
   }
 
   /** Read the installed workflow catalog. */
@@ -174,18 +221,21 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
       Object.defineProperty(resolved, field.name, { value, enumerable: true })
     }
     const at = this.now()
+    const scheduledFor = this.normalizeScheduledFor(request.scheduledFor, at)
     const run: WorkflowRunView = {
       id: randomUUID(), workflowId, workflowVersion: definition.version, input: resolved, name: definition.name, status: 'queued', createdAt: at, updatedAt: at,
       nodes: definition.nodes.map(node => ({ ...node, status: 'pending', observations: [] })),
-      events: [{ sequence: 1, at, type: 'run.queued', message: '工作流已进入待调度队列' }],
+      events: [{ sequence: 1, at, type: scheduledFor === undefined ? 'run.queued' : 'run.scheduled',
+        message: scheduledFor === undefined ? '工作流已进入待调度队列' : `工作流计划于 ${scheduledFor} 执行` }],
+      ...(scheduledFor === undefined ? {} : { scheduledFor }),
     }
     await this.repository.createRun(run)
     this.publish()
     // A plugin can unload while the initial durable write is in flight.
     if (this.stopped || this.definitions.get(workflowId) !== definition) return this.cancel({ runId: run.id })
     this.accepted.set(run.id, definition)
-    this.queuedIds.push(run.id)
-    this.pump()
+    if (scheduledFor === undefined) this.enqueueRun(run.id)
+    else this.armScheduledRun(run.id, scheduledFor)
     return structuredClone(run)
   }
 
@@ -206,6 +256,9 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
           ? { ...node, status: 'cancelled', finishedAt: at } : node),
       }), 'run.cancelled', '工作流已取消')
     })
+    this.clearScheduledTimer(runId)
+    this.recoverableScheduled.delete(runId)
+    this.removeQueuedId(runId)
     this.controllers.get(runId)?.abort(new Error('Cancelled by user'))
     if (!this.tasks.has(runId)) this.accepted.delete(runId)
     return structuredClone(cancelled)
@@ -224,6 +277,74 @@ export class LightcodeFactoryRuntime extends TypertRemoteService {
       if (run.status !== 'review') throw new Error('Task is not waiting for review')
       return this.appendEvent({ ...run, status: 'completed', updatedAt: this.now() }, 'run.completed', '评审通过，工作流已完成')
     }))
+  }
+
+  private normalizeScheduledFor(value: string | undefined, now: string): string | undefined {
+    if (value === undefined) return undefined
+    if (value.length > 64) throw new Error('Scheduled time is invalid')
+    const timestamp = Date.parse(value)
+    if (Number.isNaN(timestamp)) throw new Error('Scheduled time is invalid')
+    if (timestamp <= Date.parse(now)) throw new Error('Scheduled time must be in the future')
+    return new Date(timestamp).toISOString()
+  }
+
+  private enqueueRun(runId: string): void {
+    this.clearScheduledTimer(runId)
+    this.recoverableScheduled.delete(runId)
+    if (!this.queuedIds.includes(runId)) this.queuedIds.push(runId)
+    this.pump()
+  }
+
+  private armScheduledRun(runId: string, scheduledFor: string): void {
+    this.clearScheduledTimer(runId)
+    if (this.stopped) return
+    const remaining = Date.parse(scheduledFor) - Date.now()
+    if (remaining <= 0) {
+      this.enqueueRun(runId)
+      return
+    }
+    const timer = setTimeout(() => {
+      if (this.scheduledTimers.get(runId) !== timer) return
+      this.scheduledTimers.delete(runId)
+      void this.releaseScheduledRun(runId).catch((error: unknown) => {
+        this.ctx.logger.error('Factory scheduled release failed', error)
+      })
+    }, Math.min(remaining, MAX_TIMER_DELAY_MS))
+    ;(timer as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.()
+    this.scheduledTimers.set(runId, timer)
+  }
+
+  private async releaseScheduledRun(runId: string): Promise<void> {
+    if (this.stopped) return
+    const stored = await this.repository.getRun(runId)
+    if (stored?.run.status !== 'queued' || stored.run.scheduledFor === undefined) {
+      this.accepted.delete(runId)
+      return
+    }
+    const registration = this.accepted.get(runId)
+    if (registration === undefined) {
+      this.recoverableScheduled.set(runId, stored)
+      return
+    }
+    if (Date.parse(stored.run.scheduledFor) > Date.now()) {
+      this.armScheduledRun(runId, stored.run.scheduledFor)
+      return
+    }
+    this.enqueueRun(runId)
+  }
+
+  private clearScheduledTimer(runId: string): void {
+    const timer = this.scheduledTimers.get(runId)
+    if (timer !== undefined) clearTimeout(timer)
+    this.scheduledTimers.delete(runId)
+  }
+
+  private removeQueuedId(runId: string): void {
+    let index = this.queuedIds.indexOf(runId)
+    while (index !== -1) {
+      this.queuedIds.splice(index, 1)
+      index = this.queuedIds.indexOf(runId)
+    }
   }
 
   private pump(): void {
